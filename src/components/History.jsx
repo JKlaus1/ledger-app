@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight } from 'lucide-react';
+import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets } from 'lucide-react';
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
+import { WettingSummary } from './WettingForm';
 import {
   formatDate, formatTime, dayKey, productDisplayName,
   formatDuration, wearDuration,
@@ -9,7 +10,7 @@ import {
 
 export default function History({
   logs, products, locations, thumbs,
-  onEdit, onDelete, onPhotoTap,
+  onEdit, onDelete, onManageWettings, onPhotoTap,
 }) {
   const [periodFilter, setPeriodFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
@@ -177,6 +178,9 @@ export default function History({
                     const fromLoc = isMove ? locations.find((loc) => loc.id === l.fromLocationId) : null;
                     const toLoc = isMove ? locations.find((loc) => loc.id === l.toLocationId) : null;
                     const useLoc = !isMove ? locations.find((loc) => loc.id === l.locationId) : null;
+                    // Wettings attach to wear sessions (a use with a put-on time),
+                    // whether that diaper is on now or was worn previously.
+                    const isWearSession = !isMove && !!l.putOnAt;
 
                     return (
                       <div
@@ -242,6 +246,9 @@ export default function History({
                               </>
                             )}
                           </div>
+                          {!isMove && (
+                            <WettingSummary log={l} compact style={{ fontSize: 12, marginTop: 5 }} />
+                          )}
                           {l.notes && (
                             <div style={{
                               fontSize: 12, color: 'var(--ink-soft)',
@@ -252,7 +259,16 @@ export default function History({
                           )}
                         </div>
                         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                          {!isMove && !(l.putOnAt && l.takenOffAt == null) && (
+                          {isWearSession && onManageWettings && (
+                            <button
+                              className="btn-icon"
+                              onClick={() => onManageWettings(l)}
+                              aria-label="Log or edit wettings"
+                            >
+                              <Droplets size={14} />
+                            </button>
+                          )}
+                          {!isMove && (l.putOnAt && l.takenOffAt == null) && (
                             <button
                               className="btn-icon"
                               onClick={() => onEdit(l)}

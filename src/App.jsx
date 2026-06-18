@@ -18,6 +18,7 @@ import RestockForm from './components/RestockForm';
 import LocationManager from './components/LocationManager';
 import Settings from './components/Settings';
 import PhotoViewer from './components/PhotoViewer';
+import WettingForm from './components/WettingForm';
 
 import {
   getAllProducts, getAllLocations, getAllLogs, getAllThumbs,
@@ -51,6 +52,9 @@ export default function App() {
   const [wearDefaultProduct, setWearDefaultProduct] = useState(null);
   const [takeOffEntry, setTakeOffEntry] = useState(null);
   const [takeOffThen, setTakeOffThen] = useState('none');
+
+  // Wetting tracking modal — holds the wear-session log being edited
+  const [wettingEntry, setWettingEntry] = useState(null);
 
   const [moveFormOpen, setMoveFormOpen] = useState(false);
   const [moveProductId, setMoveProductId] = useState(null);
@@ -171,6 +175,17 @@ export default function App() {
   const openTakeOff = (entry, then = 'none') => {
     setTakeOffEntry(entry);
     setTakeOffThen(then);
+  };
+
+  // Save/persist the wettings array for a wear-session log. Works for the
+  // diaper on now or any previously worn one. Called live as the user
+  // adds/edits/removes entries in the WettingForm.
+  const handleSaveWettings = async (logId, wettings) => {
+    const target = logs.find((l) => l.id === logId);
+    if (!target) return;
+    const updated = { ...target, wettings };
+    await saveLog(updated);
+    setLogs((prev) => prev.map((l) => (l.id === logId ? updated : l)));
   };
 
   // === Save handlers ===
@@ -371,6 +386,7 @@ export default function App() {
             onChangeOut={(entry) => openTakeOff(entry, 'replace')}
             onTakeOff={(entry) => openTakeOff(entry, 'none')}
             onUndoWear={handleCancelWear}
+            onLogWetting={(entry) => setWettingEntry(entry)}
             onRestock={(p) => setRestockProduct(p)}
             onMove={openMoveForm}
             onPhotoTap={setPhotoViewerProductId}
@@ -393,6 +409,7 @@ export default function App() {
             logs={logs} products={products} locations={locations} thumbs={thumbs}
             onEdit={(l) => { setEditingLog(l); setLogFormOpen(true); }}
             onDelete={(l) => setConfirmDeleteLog(l)}
+            onManageWettings={(l) => setWettingEntry(l)}
             onPhotoTap={setPhotoViewerProductId}
           />
         )}
@@ -468,6 +485,14 @@ export default function App() {
         entry={takeOffEntry}
         product={takeOffEntry ? products.find((p) => p.id === takeOffEntry.productId) : null}
         defaultThen={takeOffThen}
+      />
+
+      <WettingForm
+        open={!!wettingEntry}
+        onClose={() => setWettingEntry(null)}
+        entry={wettingEntry ? (logs.find((l) => l.id === wettingEntry.id) || wettingEntry) : null}
+        product={wettingEntry ? products.find((p) => p.id === wettingEntry.productId) : null}
+        onSave={handleSaveWettings}
       />
 
       <MoveForm

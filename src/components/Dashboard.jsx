@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock } from 'lucide-react';
+import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock, Droplets } from 'lucide-react';
 import { ProductThumb, Eyebrow, SectionHeader, Pill } from './Common';
 import { LocationIcon } from './LocationManager';
+import { WettingSummary } from './WettingForm';
 import {
   ABSORBENCY, formatDate, formatTime, isToday,
   productDisplayName, totalStock, formatDuration, wearDuration,
@@ -10,7 +11,7 @@ import {
 export default function Dashboard({
   products, logs, locations, thumbs, activeWear,
   onAddProduct, onAddLocation,
-  onPutOn, onChangeOut, onTakeOff, onUndoWear,
+  onPutOn, onChangeOut, onTakeOff, onUndoWear, onLogWetting,
   onRestock, onMove, onPhotoTap,
 }) {
   const today = new Date();
@@ -70,12 +71,6 @@ export default function Dashboard({
         <button className="btn btn-primary" onClick={onAddLocation} style={{ marginTop: 24 }}>
           <Plus size={16} /> Add your first location
         </button>
-        <p style={{
-          marginTop: 16, fontSize: 12, color: 'var(--ink-mute)',
-          fontStyle: 'italic',
-        }}>
-          You can rename, reorder, or remove locations anytime.
-        </p>
       </div>
     );
   }
@@ -164,9 +159,20 @@ export default function Dashboard({
                       : <><span>·</span><Sun size={12} /></>}
                     {loc && <><span>·</span><LocationIcon name={loc.icon} size={12} /><span>{loc.name}</span></>}
                   </div>
+                  <WettingSummary log={activeWear} compact style={{ marginTop: 6, fontSize: 12.5 }} />
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+
+              {/* Log a wetting on the diaper that's on right now */}
+              <button
+                className="btn btn-ghost"
+                onClick={() => onLogWetting(activeWear)}
+                style={{ width: '100%', marginTop: 14 }}
+              >
+                <Droplets size={15} /> Log a wetting
+              </button>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 <button
                   className="btn btn-primary"
                   onClick={() => onChangeOut(activeWear)}
@@ -377,6 +383,7 @@ export default function Dashboard({
                           {wearDuration(l) != null && (
                             <span>· worn {formatDuration(wearDuration(l))}</span>
                           )}
+                          <WettingSummary log={l} compact style={{ fontSize: 12 }} />
                         </>
                       )}
                     </div>

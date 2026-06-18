@@ -3,12 +3,15 @@ import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Droplets } from 'lucide-react';
 import { ProductThumb, SectionHeader } from './Common';
 import { LocationIcon } from './LocationManager';
 import {
   productDisplayName, totalStock, dayKey, formatDuration,
 } from '../lib/helpers';
+import {
+  WETNESS, getWettings, wettingStats, wetnessLabel,
+} from '../lib/wetting';
 
 export default function Insights({ products, logs, locations, thumbs, daysRemainingMap }) {
   // Filter out moves - they're inventory transfers, not consumption
@@ -55,6 +58,58 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     };
     return { Daytime: calc('day'), Overnight: calc('night') };
   }, [usageLogs]);
+
+  // ---- Wetting analytics ---------------------------------------------------
+  // A "wear session" is any usage log with a putOnAt time. Wettings ride
+  // inline on those logs. We look at how many wettings each diaper took and,
+  // per product, how much load it held before leaking vs. while staying dry.
+  const wettingAgg = useMemo(() => {
+    const sessions = usageLogs.filter((l) => l.putOnAt);
+    const withWet = sessions.filter((l) => getWettings(l).length > 0);
+    const amountCounts = {};
+    WETNESS.forEach((w) => { amountCounts[w.value] = 0; });
+    let totalWettings = 0;
+    sessions.forEach((l) => {
+      getWettings(l).forEach((w) => {
+        totalWettings += 1;
+        if (amountCounts[w.amount] != null) amountCounts[w.amount] += 1;
+      });
+    });
+    return {
+      sessionCount: sessions.length,
+      wetSessionCount: withWet.length,
+      totalWettings,
+      amountCounts,
+      avgPerDiaper: sessions.length ? totalWettings / sessions.length : 0,
+      avgPerWetDiaper: withWet.length ? totalWettings / withWet.length : 0,
+    };
+  }, [usageLogs]);
+
+  // Per-product capacity: average "load" (summed wetting weight) on sessions
+  // that leaked vs. the most it held on a session that did NOT leak.
+  const capacityByProduct = useMemo(() => {
+    const m = new Map();
+    usageLogs.filter((l) => l.putOnAt).forEach((l) => {
+      const st = wettingStats(l);
+      if (st.count === 0) return;
+      if (!m.has(l.productId)) m.set(l.productId, { leakLoads: [], heldLoads: [] });
+      const e = m.get(l.productId);
+      if (l.performance === 'leak') e.leakLoads.push(st.load);
+      else e.heldLoads.push(st.load); // dry / used = held without leaking
+    });
+    const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+    return [...m.entries()]
+      .map(([id, e]) => ({
+        product: products.find((p) => p.id === id),
+        avgLeakLoad: avg(e.leakLoads),
+        avgHeldLoad: avg(e.heldLoads),
+        maxHeld: e.heldLoads.length ? Math.max(...e.heldLoads) : null,
+        leakCount: e.leakLoads.length,
+        heldCount: e.heldLoads.length,
+      }))
+      .filter((x) => x.product && (x.leakCount + x.heldCount) >= 1)
+      .sort((a, b) => (b.avgLeakLoad ?? b.maxHeld ?? 0) - (a.avgLeakLoad ?? a.maxHeld ?? 0));
+  }, [usageLogs, products]);
 
   // Top products
   const topProducts = useMemo(() => {
@@ -107,6 +162,13 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     : 0;
   const avgPerDay = trackingDays > 0 ? (totalUses / trackingDays).toFixed(1) : '0';
 
+  // Auto section numbering — increments only for sections that actually render,
+  // so inserting/removing a section never desyncs the labels.
+  let secCount = 0;
+  const secNum = () => String(++secCount).padStart(2, '0');
+
+  const hasWetting = wettingAgg.totalWettings > 0;
+
   if (usageLogs.length === 0) {
     return (
       <div className="empty-state">
@@ -145,7 +207,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
 
       {/* Daily chart */}
       <section style={{ marginBottom: 36 }}>
-        <SectionHeader number="01" title="Last 14 days" />
+        <SectionHeader number={secNum()} title="Last 14 days" />
         <div className="card" style={{ padding: 16 }}>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={dailyData} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
@@ -184,7 +246,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
 
       {/* Day / night */}
       <section style={{ marginBottom: 36 }}>
-        <SectionHeader number="02" title="Day vs. night" />
+        <SectionHeader number={secNum()} title="Day vs. night" />
         <div className="card" style={{
           padding: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         }}>
@@ -227,10 +289,119 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
         </div>
       </section>
 
+      {/* Wetting analysis */}
+      {hasWetting && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Wetting analysis" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Across every diaper you've logged a wetting on. "Load" is a weighted
+            saturation score — light 1, moderate 2, heavy 3, very heavy 4.
+          </p>
+
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 16, marginBottom: 20,
+          }}>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>
+                {wettingAgg.totalWettings}
+              </div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Wettings</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>
+                {wettingAgg.avgPerDiaper.toFixed(1)}
+              </div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Avg / diaper</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>
+                {wettingAgg.avgPerWetDiaper.toFixed(1)}
+              </div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Avg / wet diaper</div>
+            </div>
+          </div>
+
+          {/* Amount distribution */}
+          <div className="card" style={{ padding: 4, marginBottom: 20 }}>
+            {WETNESS.map((w) => {
+              const count = wettingAgg.amountCounts[w.value] || 0;
+              const pct = wettingAgg.totalWettings
+                ? (count / wettingAgg.totalWettings) * 100 : 0;
+              return (
+                <div key={w.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <Droplets size={14} style={{ color: 'var(--accent)', alignSelf: 'center' }} />
+                    <span style={{ flex: 1, fontSize: 14 }}>{w.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{count}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 4 }}>
+                      {wettingAgg.totalWettings ? `${Math.round(pct)}%` : ''}
+                    </span>
+                  </div>
+                  <div style={{
+                    height: 3, background: 'var(--line-soft)',
+                    borderRadius: 2, marginTop: 8, marginLeft: 24,
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`,
+                      background: 'var(--accent)', borderRadius: 2,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Capacity before leak, per product */}
+          {capacityByProduct.length > 0 && (
+            <>
+              <p style={{
+                fontSize: 12, color: 'var(--ink-mute)',
+                marginBottom: 12, fontStyle: 'italic',
+              }}>
+                How much each product tends to hold — the average load when it
+                leaked vs. the most it held while staying dry.
+              </p>
+              <div className="card" style={{ padding: 4 }}>
+                {capacityByProduct.map((c) => (
+                  <div key={c.product.id} className="row-divider" style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <ProductThumb
+                        product={c.product} thumbs={thumbs} size={20}
+                        style={{ alignSelf: 'center' }}
+                      />
+                      <span style={{ flex: 1, fontSize: 14 }}>{productDisplayName(c.product)}</span>
+                    </div>
+                    <div style={{
+                      display: 'flex', gap: 12, marginTop: 6,
+                      marginLeft: 22, fontSize: 12, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ color: c.avgLeakLoad != null ? 'var(--danger)' : 'var(--ink-mute)' }}>
+                        {c.avgLeakLoad != null
+                          ? <>leaked at <span className="num">~{c.avgLeakLoad.toFixed(1)}</span> load <span style={{ color: 'var(--ink-mute)' }}>({c.leakCount}×)</span></>
+                          : 'no leaks logged'}
+                      </span>
+                      {c.maxHeld != null && (
+                        <span style={{ color: 'var(--primary)' }}>
+                          held up to <span className="num">{c.maxHeld}</span> dry <span style={{ color: 'var(--ink-mute)' }}>({c.heldCount}×)</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
       {/* Usage by location */}
       {locationUsage.length > 0 && (
         <section style={{ marginBottom: 36 }}>
-          <SectionHeader number="03" title="Usage by location" />
+          <SectionHeader number={secNum()} title="Usage by location" />
           <p style={{
             fontSize: 12, color: 'var(--ink-mute)',
             marginTop: -8, marginBottom: 12, fontStyle: 'italic',
@@ -270,7 +441,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       {/* Top products */}
       {topProducts.length > 0 && (
         <section style={{ marginBottom: 36 }}>
-          <SectionHeader number={locationUsage.length > 0 ? '04' : '03'} title="Most used" />
+          <SectionHeader number={secNum()} title="Most used" />
           <div className="card" style={{ padding: 4 }}>
             {topProducts.map(({ product, count }, i) => {
               const max = topProducts[0].count;
@@ -309,7 +480,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       {/* Performance */}
       {performance.length > 0 && (
         <section style={{ marginBottom: 36 }}>
-          <SectionHeader number={locationUsage.length > 0 ? '05' : '04'} title="Performance" />
+          <SectionHeader number={secNum()} title="Performance" />
           <p style={{
             fontSize: 12, color: 'var(--ink-mute)',
             marginTop: -8, marginBottom: 12, fontStyle: 'italic',
@@ -352,13 +523,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
 
       {/* Days remaining */}
       <section style={{ marginBottom: 36 }}>
-        <SectionHeader
-          number={
-            locationUsage.length > 0 && performance.length > 0 ? '06' :
-            locationUsage.length > 0 || performance.length > 0 ? '05' : '04'
-          }
-          title="Estimated days remaining"
-        />
+        <SectionHeader number={secNum()} title="Estimated days remaining" />
         <p style={{
           fontSize: 12, color: 'var(--ink-mute)',
           marginTop: -8, marginBottom: 12, fontStyle: 'italic',
