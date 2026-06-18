@@ -327,10 +327,10 @@ export default function App() {
         }}>
           <div style={{ flex: 1 }}>
             <span className="display-italic" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>
-              ledger
+              Diaper
             </span>
             <span className="eyebrow" style={{ marginLeft: 10, fontSize: 9.5 }}>
-              supplies & usage
+              usage and inventory tracking
             </span>
           </div>
           <nav className="top-tabs">
