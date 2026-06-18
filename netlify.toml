@@ -1,0 +1,24 @@
+# Netlify configuration for Ledger.
+# Used by both Git-connected deploys and the Netlify CLI.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Single-page app: send any unknown path back to index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Never let the HTML or the service worker be cached by the CDN/browser,
+# so new deploys are picked up immediately. Hashed assets stay long-cached.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    cache-control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    cache-control = "public, max-age=0, must-revalidate"
