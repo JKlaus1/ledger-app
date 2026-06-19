@@ -5,6 +5,7 @@ import {
   PERFORMANCE, toLocalInputValue, fromLocalInputValue,
   productDisplayName, formatDuration,
 } from '../lib/helpers';
+import { CHANGE_REASONS, SKIN_STATES } from '../lib/session';
 
 // TakeOffForm — ends the active wear session. Records take-off time,
 // how it performed, and optional notes. A "then" choice lets the user
@@ -14,6 +15,9 @@ export default function TakeOffForm({
 }) {
   const [takenOffAt, setTakenOffAt] = useState(Date.now());
   const [performance, setPerformance] = useState('used');
+  const [changeReason, setChangeReason] = useState('');
+  const [skin, setSkin] = useState('');
+  const [cream, setCream] = useState(false);
   const [notes, setNotes] = useState('');
   const [then, setThen] = useState('none'); // 'none' | 'replace'
 
@@ -21,6 +25,9 @@ export default function TakeOffForm({
     if (open) {
       setTakenOffAt(Date.now());
       setPerformance('used');
+      setChangeReason('');
+      setSkin('');
+      setCream(false);
       setNotes('');
       setThen(defaultThen === 'replace' ? 'replace' : 'none');
     }
@@ -42,6 +49,9 @@ export default function TakeOffForm({
         ...entry,
         takenOffAt: effectiveOff,
         performance,
+        changeReason: changeReason || null,
+        skin: skin || null,
+        cream: !!cream,
         notes: merged,
       },
       then === 'replace'
@@ -95,6 +105,48 @@ export default function TakeOffForm({
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="label">Why the change? (optional)</label>
+          <select
+            className="select"
+            value={changeReason}
+            onChange={(e) => setChangeReason(e.target.value)}
+          >
+            <option value="">Not set</option>
+            {CHANGE_REASONS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label">Skin check (optional)</label>
+          <div className="seg" style={{ width: '100%' }}>
+            {SKIN_STATES.map((s) => (
+              <button
+                key={s.value}
+                type="button" style={{ flex: 1 }}
+                className={`seg-btn ${skin === s.value ? 'active' : ''}`}
+                onClick={() => setSkin(skin === s.value ? '' : s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Barrier cream applied?</label>
+          <button
+            type="button"
+            className={`check-row ${cream ? 'active' : ''}`}
+            onClick={() => setCream(!cream)}
+          >
+            <span style={{ flex: 1 }}>{cream ? 'Yes — applied' : 'No'}</span>
+            {cream && <Check size={14} />}
+          </button>
         </div>
 
         <div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Settings as SettingsIcon, LayoutDashboard,
   Package, ClipboardList, BarChart3, Repeat,
+  ShieldAlert, X,
 } from 'lucide-react';
 
 import { Toast, ConfirmDialog } from './components/Common';
@@ -23,9 +24,9 @@ import WettingForm from './components/WettingForm';
 import {
   getAllProducts, getAllLocations, getAllLogs, getAllThumbs,
   saveProduct, removeProduct, saveLocation, removeLocation,
-  saveLog, removeLog,
+  saveLog, removeLog, kvGet,
 } from './lib/storage';
-import { stockAt, isWornNow } from './lib/helpers';
+import { stockAt, isWornNow, formatDuration } from './lib/helpers';
 
 export default function App() {
   // Core data
@@ -34,6 +35,10 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [thumbs, setThumbs] = useState({});
   const [loading, setLoading] = useState(true);
+
+  // Backup reminder
+  const [lastBackupAt, setLastBackupAt] = useState(null);
+  const [backupDismissed, setBackupDismissed] = useState(false);
 
   // UI state
   const [tab, setTab] = useState('home');
@@ -81,6 +86,7 @@ export default function App() {
       setLocations(l || []);
       setLogs(lg || []);
       setThumbs(th || {});
+      try { setLastBackupAt(await kvGet('lastBackupAt')); } catch { /* ignore */ }
     } catch (e) {
       console.error('Load failed', e);
     }
@@ -333,6 +339,13 @@ export default function App() {
 
   const showFab = locations.length > 0 && products.length > 0;
 
+  // Nudge a backup if there's data to lose and it's been >14 days (or never).
+  const BACKUP_AGE_MS = 14 * 24 * 3600 * 1000;
+  const needsBackup =
+    logs.length > 0 &&
+    !backupDismissed &&
+    (lastBackupAt == null || Date.now() - lastBackupAt > BACKUP_AGE_MS);
+
   return (
     <div>
       <header className="app-header">
@@ -376,6 +389,39 @@ export default function App() {
       <main className="with-bottom-nav" style={{
         maxWidth: 760, margin: '0 auto', padding: '24px 20px',
       }}>
+        {needsBackup && (
+          <div className="card" style={{
+            padding: '12px 14px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 12,
+            borderColor: 'var(--accent)',
+          }}>
+            <ShieldAlert size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+              <div style={{ fontWeight: 600 }}>Time to back up</div>
+              <div style={{ color: 'var(--ink-soft)' }}>
+                {lastBackupAt
+                  ? `Last backup was ${formatDuration(Date.now() - lastBackupAt)} ago. `
+                  : 'Your data lives only on this device. '}
+                Export a copy so you don't lose it.
+              </div>
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ flexShrink: 0 }}
+              onClick={() => setSettingsOpen(true)}
+            >
+              Back up
+            </button>
+            <button
+              className="btn-icon"
+              aria-label="Dismiss backup reminder"
+              style={{ flexShrink: 0 }}
+              onClick={() => setBackupDismissed(true)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         {tab === 'home' && (
           <Dashboard
             products={products} logs={logs} locations={locations} thumbs={thumbs}
@@ -528,6 +574,8 @@ export default function App() {
         onOpenLocations={() => setLocationsOpen(true)}
         onDataChanged={loadAll}
         onShowToast={setToastMsg}
+        lastBackupAt={lastBackupAt}
+        onBackedUp={(ts) => { setLastBackupAt(ts); setBackupDismissed(true); }}
       />
 
       <PhotoViewer

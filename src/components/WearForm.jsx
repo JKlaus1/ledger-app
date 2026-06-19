@@ -7,6 +7,7 @@ import {
   toLocalInputValue, fromLocalInputValue,
   productDisplayName, stockAt,
 } from '../lib/helpers';
+import { CONTEXTS } from '../lib/session';
 
 // WearForm — "put one on". Creates an active wear session: a log entry
 // with putOnAt set and takenOffAt: null. Stock is decremented at the
@@ -19,6 +20,8 @@ export default function WearForm({
     locationId: '', // ALWAYS ASK — no default
     putOnAt: Date.now(),
     period: guessPeriod(Date.now()),
+    booster: false,
+    context: '',
     notes: '',
   });
   const [form, setForm] = useState(makeBlank());
@@ -56,6 +59,8 @@ export default function WearForm({
       timestamp: form.putOnAt, // kept in sync with put-on for sorting/filtering
       period: form.period,
       performance: null, // recorded at take-off
+      booster: !!form.booster,
+      context: form.context || null,
       notes: form.notes.trim(),
     });
   };
@@ -162,6 +167,34 @@ export default function WearForm({
               <Moon size={14} /> Overnight
             </button>
           </div>
+        </div>
+
+        <div>
+          <label className="label">Booster / doubler added?</label>
+          <button
+            type="button"
+            className={`check-row ${form.booster ? 'active' : ''}`}
+            onClick={() => update('booster', !form.booster)}
+          >
+            <span style={{ flex: 1 }}>
+              {form.booster ? 'Yes — booster added' : 'No booster'}
+            </span>
+            {form.booster && <Check size={14} />}
+          </button>
+        </div>
+
+        <div>
+          <label className="label">Context (optional)</label>
+          <select
+            className="select"
+            value={form.context}
+            onChange={(e) => update('context', e.target.value)}
+          >
+            <option value="">Not set</option>
+            {CONTEXTS.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
         </div>
 
         <div>

@@ -3,6 +3,7 @@ import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets } from '
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
+import { contextLabel, reasonLabel } from '../lib/session';
 import {
   formatDate, formatTime, dayKey, productDisplayName,
   formatDuration, wearDuration,
@@ -243,6 +244,11 @@ export default function History({
                                 )}
                                 {l.performance === 'leak' && <span style={{ color: 'var(--danger)' }}>· Leaked</span>}
                                 {l.performance === 'dry' && <span style={{ color: 'var(--primary)' }}>· Stayed dry</span>}
+                                {l.booster && <span style={{ color: 'var(--accent)' }}>· +booster</span>}
+                                {l.context && <span>· {contextLabel(l.context) || l.context}</span>}
+                                {l.changeReason && !['routine', 'leak'].includes(l.changeReason) && (
+                                  <span>· {reasonLabel(l.changeReason) || l.changeReason}</span>
+                                )}
                               </>
                             )}
                           </div>

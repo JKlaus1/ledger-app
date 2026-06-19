@@ -1,10 +1,12 @@
 import React, { useRef, useState } from 'react';
 import { Download, Upload, MapPin, AlertTriangle } from 'lucide-react';
 import { Modal, ConfirmDialog } from './Common';
-import { exportAll, importAll, clearAll } from '../lib/storage';
+import { exportAll, importAll, clearAll, kvSet } from '../lib/storage';
+import { formatDate } from '../lib/helpers';
 
 export default function Settings({
   open, onClose, onOpenLocations, onDataChanged, onShowToast,
+  lastBackupAt, onBackedUp,
 }) {
   const fileRef = useRef(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -23,6 +25,9 @@ export default function Settings({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      const now = Date.now();
+      try { await kvSet('lastBackupAt', now); } catch {}
+      onBackedUp?.(now);
       onShowToast?.('Backup downloaded');
     } catch (e) {
       onShowToast?.('Export failed');
@@ -92,6 +97,11 @@ export default function Settings({
           <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>
             Export your data as a JSON file. Save it somewhere safe in case your phone dies or browser data gets cleared. Re-import to restore.
           </p>
+          <div style={{ fontSize: 12, color: lastBackupAt ? 'var(--ink-mute)' : 'var(--accent)', fontStyle: 'italic' }}>
+            {lastBackupAt
+              ? `Last backed up ${formatDate(lastBackupAt, { year: true })}.`
+              : 'No backup yet on this device.'}
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" onClick={handleExport}>
               <Download size={14} /> Export backup

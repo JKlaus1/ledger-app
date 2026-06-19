@@ -12,6 +12,9 @@ import {
 import {
   WETNESS, getWettings, wettingStats, wetnessLabel,
 } from '../lib/wetting';
+import {
+  CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
+} from '../lib/session';
 
 export default function Insights({ products, logs, locations, thumbs, daysRemainingMap }) {
   // Filter out moves - they're inventory transfers, not consumption
@@ -111,6 +114,72 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       .sort((a, b) => (b.avgLeakLoad ?? b.maxHeld ?? 0) - (a.avgLeakLoad ?? a.maxHeld ?? 0));
   }, [usageLogs, products]);
 
+  // Wetting distribution by hour of day (0–23), across every session.
+  const wettingByHour = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0 }));
+    usageLogs.filter((l) => l.putOnAt).forEach((l) => {
+      getWettings(l).forEach((w) => {
+        const h = new Date(w.at).getHours();
+        if (h >= 0 && h < 24) hours[h].count += 1;
+      });
+    });
+    return hours;
+  }, [usageLogs]);
+
+  // Booster effect: leak rate and average load with vs. without a booster.
+  const boosterEffect = useMemo(() => {
+    const sessions = usageLogs.filter((l) => l.putOnAt);
+    const grp = (withB) => {
+      const s = sessions.filter((l) => !!l.booster === withB);
+      const perf = s.filter((l) => l.performance);
+      const leaks = perf.filter((l) => l.performance === 'leak').length;
+      const loads = s.map((l) => wettingStats(l).load).filter((x) => x > 0);
+      return {
+        n: s.length,
+        leakRate: perf.length ? leaks / perf.length : null,
+        avgLoad: loads.length ? loads.reduce((a, b) => a + b, 0) / loads.length : null,
+      };
+    };
+    return { withB: grp(true), withoutB: grp(false) };
+  }, [usageLogs]);
+
+  // Usage + leak rate broken down by the context it was worn in.
+  const contextStats = useMemo(() => {
+    const m = new Map();
+    usageLogs.filter((l) => l.putOnAt && l.context).forEach((l) => {
+      if (!m.has(l.context)) m.set(l.context, { count: 0, perf: 0, leaks: 0 });
+      const e = m.get(l.context);
+      e.count += 1;
+      if (l.performance) { e.perf += 1; if (l.performance === 'leak') e.leaks += 1; }
+    });
+    return [...m.entries()]
+      .map(([value, e]) => ({ value, label: contextLabel(value) || value, ...e }))
+      .sort((a, b) => b.count - a.count);
+  }, [usageLogs]);
+
+  // Why changes happen — distribution of change reasons.
+  const reasonStats = useMemo(() => {
+    const m = new Map();
+    usageLogs.filter((l) => l.putOnAt && l.changeReason).forEach((l) => {
+      m.set(l.changeReason, (m.get(l.changeReason) || 0) + 1);
+    });
+    const total = [...m.values()].reduce((a, b) => a + b, 0);
+    return {
+      total,
+      rows: CHANGE_REASONS
+        .map((r) => ({ ...r, count: m.get(r.value) || 0 }))
+        .filter((r) => r.count > 0)
+        .sort((a, b) => b.count - a.count),
+    };
+  }, [usageLogs]);
+
+  // Skin check summary — how often skin was noted as pink or irritated.
+  const skinStat = useMemo(() => {
+    const sess = usageLogs.filter((l) => l.putOnAt && l.skin);
+    const flagged = sess.filter((l) => l.skin === 'irritated' || l.skin === 'pink').length;
+    return { total: sess.length, flagged };
+  }, [usageLogs]);
+
   // Top products
   const topProducts = useMemo(() => {
     const m = new Map();
@@ -161,6 +230,34 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     ? Math.max(1, Math.ceil((Date.now() - firstLog) / (24 * 3600 * 1000)))
     : 0;
   const avgPerDay = trackingDays > 0 ? (totalUses / trackingDays).toFixed(1) : '0';
+
+  // Cost & value, from each product's pack cost ÷ pack size.
+  const costAnalysis = useMemo(() => {
+    const rows = [];
+    let totalSpent = 0;
+    products.forEach((p) => {
+      const uc = unitCost(p);
+      if (uc == null) return;
+      const uses = usageLogs.filter((l) => l.productId === p.id).length;
+      const spent = uses * uc;
+      totalSpent += spent;
+      const perf = usageLogs.filter((l) => l.productId === p.id && l.performance);
+      const leaks = perf.filter((l) => l.performance === 'leak').length;
+      const leakRate = perf.length ? leaks / perf.length : null;
+      const perGood = leakRate != null && leakRate < 1 ? uc / (1 - leakRate) : uc;
+      rows.push({ product: p, unit: uc, uses, spent, leakRate, perGood });
+    });
+    rows.sort((a, b) => b.spent - a.spent);
+    const costPerDay = trackingDays > 0 ? totalSpent / trackingDays : 0;
+    return { rows, totalSpent, costPerDay, monthly: costPerDay * 30 };
+  }, [products, usageLogs, trackingDays]);
+
+  // Format an hour (0–23) as a compact 12-hour label, e.g. 3a, 12p, 9p.
+  const fmtHour = (h) => {
+    const hr = ((h % 24) + 24) % 24;
+    const h12 = hr % 12 === 0 ? 12 : hr % 12;
+    return `${h12}${hr < 12 ? 'a' : 'p'}`;
+  };
 
   // Auto section numbering — increments only for sections that actually render,
   // so inserting/removing a section never desyncs the labels.
@@ -355,6 +452,40 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
             })}
           </div>
 
+          {/* Wetting time of day */}
+          <div style={{ marginBottom: 20 }}>
+            <p style={{
+              fontSize: 12, color: 'var(--ink-mute)',
+              marginBottom: 8, fontStyle: 'italic',
+            }}>
+              When wettings tend to happen, by hour of day.
+            </p>
+            <div className="card" style={{ padding: 16 }}>
+              <ResponsiveContainer width="100%" height={170}>
+                <BarChart data={wettingByHour} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
+                  <XAxis
+                    dataKey="hour" tick={{ fontSize: 10, fill: '#8A8478' }}
+                    axisLine={{ stroke: '#DDD6C5' }} tickLine={false}
+                    interval={2} tickFormatter={fmtHour}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#8A8478' }}
+                    axisLine={false} tickLine={false} allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: '#FBF8F2', border: '1px solid #DDD6C5',
+                      borderRadius: 6, fontSize: 12,
+                    }}
+                    cursor={{ fill: 'rgba(31,42,36,0.05)' }}
+                    labelFormatter={(h) => fmtHour(h)}
+                  />
+                  <Bar dataKey="count" fill="#C9985A" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
           {/* Capacity before leak, per product */}
           {capacityByProduct.length > 0 && (
             <>
@@ -395,6 +526,182 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
               </div>
             </>
           )}
+        </section>
+      )}
+
+      {/* Cost & value */}
+      {costAnalysis.rows.length > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Cost & value" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            From each product's pack cost ÷ pack size, in whatever currency you entered. Add those on a product to include it here.
+          </p>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 16, marginBottom: 20,
+          }}>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{fmtMoney(costAnalysis.monthly)}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Est. / month</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{fmtMoney(costAnalysis.costPerDay)}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Avg / day</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{fmtMoney(costAnalysis.totalSpent)}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Logged spend</div>
+            </div>
+          </div>
+          <div className="card" style={{ padding: 4 }}>
+            {costAnalysis.rows.map(({ product, unit, uses, spent, leakRate, perGood }) => (
+              <div key={product.id} className="row-divider" style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <ProductThumb product={product} thumbs={thumbs} size={20} style={{ alignSelf: 'center' }} />
+                  <span style={{ flex: 1, fontSize: 14 }}>{productDisplayName(product)}</span>
+                  <span className="num" style={{ fontSize: 15 }}>{fmtMoney(unit)}</span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 4 }}>each</span>
+                </div>
+                <div style={{
+                  display: 'flex', gap: 12, marginTop: 6, marginLeft: 30,
+                  fontSize: 12, color: 'var(--ink-mute)', flexWrap: 'wrap',
+                }}>
+                  <span>{uses} used · {fmtMoney(spent)} spent</span>
+                  {leakRate != null && leakRate > 0 && (
+                    <span style={{ color: 'var(--primary)' }}>
+                      {fmtMoney(perGood)} per leak-free wear
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Boosters */}
+      {boosterEffect.withB.n > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Boosters" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Whether adding a booster changed how often things leaked or how much was held.
+          </p>
+          <div className="card" style={{ padding: 4 }}>
+            {[{ key: 'withB', label: 'With booster' }, { key: 'withoutB', label: 'Without booster' }].map(({ key, label }) => {
+              const g = boosterEffect[key];
+              return (
+                <div key={key} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{label}</span>
+                    <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+                      {g.n} session{g.n !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div style={{
+                    display: 'flex', gap: 12, marginTop: 6,
+                    fontSize: 12, flexWrap: 'wrap',
+                  }}>
+                    <span style={{ color: g.leakRate ? 'var(--danger)' : 'var(--ink-mute)' }}>
+                      {g.leakRate == null ? 'no leak data' : `${Math.round(g.leakRate * 100)}% leaked`}
+                    </span>
+                    <span style={{ color: 'var(--accent)' }}>
+                      {g.avgLoad == null ? 'no load data' : `avg load ${g.avgLoad.toFixed(1)}`}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* By context */}
+      {contextStats.length > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="By context" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Where you were wearing it, and how often each leaked.
+          </p>
+          <div className="card" style={{ padding: 4 }}>
+            {contextStats.map((c) => {
+              const max = contextStats[0].count;
+              const pct = (c.count / max) * 100;
+              return (
+                <div key={c.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{c.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{c.count}</span>
+                    {c.perf > 0 && (
+                      <span style={{
+                        fontSize: 11, marginLeft: 4,
+                        color: c.leaks ? 'var(--danger)' : 'var(--ink-mute)',
+                      }}>
+                        {Math.round((c.leaks / c.perf) * 100)}% leak
+                      </span>
+                    )}
+                  </div>
+                  <div style={{
+                    height: 3, background: 'var(--line-soft)',
+                    borderRadius: 2, marginTop: 8,
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`,
+                      background: 'var(--primary)', borderRadius: 2,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Why changes happen */}
+      {reasonStats.total > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Why changes happen" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            {skinStat.total > 0
+              ? `Skin noted as pink or irritated on ${skinStat.flagged} of ${skinStat.total} change${skinStat.total !== 1 ? 's' : ''}.`
+              : 'What prompts a change, across your logged take-offs.'}
+          </p>
+          <div className="card" style={{ padding: 4 }}>
+            {reasonStats.rows.map((r) => {
+              const pct = (r.count / reasonStats.total) * 100;
+              return (
+                <div key={r.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{r.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{r.count}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 4 }}>
+                      {Math.round(pct)}%
+                    </span>
+                  </div>
+                  <div style={{
+                    height: 3, background: 'var(--line-soft)',
+                    borderRadius: 2, marginTop: 8,
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`,
+                      background: 'var(--accent)', borderRadius: 2,
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 
