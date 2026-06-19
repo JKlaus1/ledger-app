@@ -3,6 +3,7 @@ import { Camera, Check, Trash2 } from 'lucide-react';
 import { Modal } from './Common';
 import { LocationIcon } from './LocationManager';
 import { TYPES, ABSORBENCY, SIZES, COLORS, uid, totalStock } from '../lib/helpers';
+import { BACKINGS, TAB_TYPES } from '../lib/session';
 import { processImage, dataUrlSize } from '../lib/images';
 import { savePhoto, removePhoto, getPhoto } from '../lib/storage';
 
@@ -113,7 +114,7 @@ export default function ProductForm({
   const blank = {
     brand: '', name: '', type: 'brief', absorbency: 'overnight',
     size: 'M', stock: {}, packSize: '', cost: '', color: COLORS[0].hex,
-    print: '', notes: '',
+    print: '', backing: '', tabs: '', notes: '',
   };
   const [form, setForm] = useState(blank);
   // Pending photo data: null = no change, undefined = clear, { thumb, full } = new photo
@@ -167,6 +168,8 @@ export default function ProductForm({
       cost: form.cost === '' ? null : Number(form.cost),
       color: form.color,
       print: form.print.trim(),
+      backing: form.backing || null,
+      tabs: form.tabs || null,
       notes: form.notes.trim(),
       createdAt: initial?.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -270,6 +273,23 @@ export default function ProductForm({
             <label className="label">Absorbency</label>
             <select className="select" value={form.absorbency} onChange={(e) => update('absorbency', e.target.value)}>
               {ABSORBENCY.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div>
+            <label className="label">Backing</label>
+            <select className="select" value={form.backing} onChange={(e) => update('backing', e.target.value)}>
+              <option value="">Not set</option>
+              {BACKINGS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Tabs</label>
+            <select className="select" value={form.tabs} onChange={(e) => update('tabs', e.target.value)}>
+              <option value="">Not set</option>
+              {TAB_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
         </div>

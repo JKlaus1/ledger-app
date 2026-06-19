@@ -35,11 +35,25 @@ export const SKIN_STATES = [
   { value: 'irritated', label: 'Irritated',     order: 3 },
 ];
 
+// Product construction — how the diaper is backed, and how the tabs fasten.
+// Optional on a product; older products without them read as "not set".
+export const BACKINGS = [
+  { value: 'plastic', label: 'Plastic-backed' },
+  { value: 'cloth',   label: 'Cloth-backed' },
+];
+
+export const TAB_TYPES = [
+  { value: 'taped',  label: 'Taped' },
+  { value: 'velcro', label: 'Velcro' },
+];
+
 const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 
 export const contextLabel = (v) => labelOf(CONTEXTS, v);
 export const reasonLabel = (v) => labelOf(CHANGE_REASONS, v);
 export const skinLabel = (v) => labelOf(SKIN_STATES, v);
+export const backingLabel = (v) => labelOf(BACKINGS, v);
+export const tabsLabel = (v) => labelOf(TAB_TYPES, v);
 
 // Per-unit cost from a product's pack cost / pack size, or null if either
 // is missing. Centralized so the inventory and insights agree.

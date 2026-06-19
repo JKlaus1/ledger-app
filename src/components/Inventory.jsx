@@ -5,6 +5,7 @@ import { LocationIcon } from './LocationManager';
 import {
   TYPES, ABSORBENCY, productDisplayName, totalStock, stockAt,
 } from '../lib/helpers';
+import { backingLabel, tabsLabel } from '../lib/session';
 
 function ProductRow({
   product, locations, thumbs, daysRemaining,
@@ -34,6 +35,8 @@ function ProductRow({
             <Pill>{TYPES.find((t) => t.value === product.type)?.short}</Pill>
             <Pill>Size {product.size}</Pill>
             <Pill>{ABSORBENCY.find((a) => a.value === product.absorbency)?.label}</Pill>
+            {product.backing && <Pill>{backingLabel(product.backing)}</Pill>}
+            {product.tabs && <Pill>{tabsLabel(product.tabs)}</Pill>}
           </div>
           {product.notes && (
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 8, fontStyle: 'italic' }}>
