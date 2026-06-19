@@ -6,9 +6,10 @@ import {
   TYPES, ABSORBENCY, productDisplayName, totalStock, stockAt,
 } from '../lib/helpers';
 import { backingLabel, tabsLabel } from '../lib/session';
+import { groupProducts } from '../lib/variants';
 
 function ProductRow({
-  product, locations, thumbs, daysRemaining,
+  product, locations, thumbs, daysRemaining, titleOverride = null,
   onLogQuick, onRestock, onMove, onEdit, onPhotoTap,
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -29,7 +30,7 @@ function ProductRow({
         />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span className="display" style={{ fontSize: 17 }}>{productDisplayName(product)}</span>
+            <span className="display" style={{ fontSize: 17 }}>{titleOverride ?? productDisplayName(product)}</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
             <Pill>{TYPES.find((t) => t.value === product.type)?.short}</Pill>
@@ -131,6 +132,58 @@ function ProductRow({
         >
           <Pencil size={15} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function GroupBlock({
+  group, locations, thumbs, daysRemainingMap,
+  onLogQuick, onRestock, onMove, onEdit, onPhotoTap,
+}) {
+  const rowProps = {
+    locations, thumbs, onLogQuick, onRestock, onMove, onEdit, onPhotoTap,
+  };
+
+  // A single-variant group renders exactly like a normal row — no extra chrome.
+  if (!group.isMulti) {
+    const p = group.products[0];
+    return (
+      <ProductRow product={p} daysRemaining={daysRemainingMap[p.id]} {...rowProps} />
+    );
+  }
+
+  // Multiple variants: a header for the shared product, variants nested beneath.
+  return (
+    <div
+      style={{
+        border: '1px solid var(--line)', borderRadius: 14,
+        padding: '4px 10px', marginBottom: 12,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 4px' }}>
+        <ProductThumb product={group.rep} thumbs={thumbs} size={30} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span className="display" style={{ fontSize: 16 }}>{group.label}</span>
+          <span className="eyebrow" style={{ fontSize: 9.5, marginLeft: 8 }}>
+            {group.products.length} variants
+          </span>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <span className="num" style={{ fontSize: 20 }}>{group.total}</span>
+          <span className="eyebrow" style={{ fontSize: 9, marginLeft: 4 }}>total</span>
+        </div>
+      </div>
+      <div style={{ borderLeft: '2px solid var(--line)', marginLeft: 14, paddingLeft: 6 }}>
+        {group.products.map((p) => (
+          <ProductRow
+            key={p.id}
+            product={p}
+            daysRemaining={daysRemainingMap[p.id]}
+            titleOverride={(p.print && p.print.trim()) || 'Default'}
+            {...rowProps}
+          />
+        ))}
       </div>
     </div>
   );
@@ -269,13 +322,13 @@ export default function Inventory({
             No items match this filter.
           </div>
         ) : (
-          filtered.map((p) => (
-            <ProductRow
-              key={p.id}
-              product={p}
+          groupProducts(filtered).map((g) => (
+            <GroupBlock
+              key={g.key}
+              group={g}
               locations={locations}
               thumbs={thumbs}
-              daysRemaining={daysRemainingMap[p.id]}
+              daysRemainingMap={daysRemainingMap}
               onLogQuick={onLogQuick}
               onRestock={onRestock}
               onMove={onMove}
