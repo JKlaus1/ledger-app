@@ -48,6 +48,25 @@ export const TAB_TYPES = [
   { value: 'tearaway', label: 'Tear-away (pull-up)' },
 ];
 
+// How physically active you were over the wear — recorded at take-off.
+// Ordered so Insights can later relate activity to how the core held up
+// (the hunch being that active + wet breaks a core down faster than rest).
+export const ACTIVITY_LEVELS = [
+  { value: 'rest',     label: 'Rest / sitting',        order: 1 },
+  { value: 'light',    label: 'Light / around home',   order: 2 },
+  { value: 'moderate', label: 'Moderate / on my feet', order: 3 },
+  { value: 'vigorous', label: 'Vigorous / very active', order: 4 },
+];
+
+// How the absorbent core held together by take-off. Ordered worst-ascending
+// so a future view can flag the sessions where it fell apart.
+export const CORE_CONDITIONS = [
+  { value: 'held',     label: 'Held its shape',    order: 1 },
+  { value: 'softened', label: 'Softened',          order: 2 },
+  { value: 'clumped',  label: 'Clumped / shifted', order: 3 },
+  { value: 'broke',    label: 'Broke apart',       order: 4 },
+];
+
 const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 
 export const contextLabel = (v) => labelOf(CONTEXTS, v);
@@ -55,6 +74,8 @@ export const reasonLabel = (v) => labelOf(CHANGE_REASONS, v);
 export const skinLabel = (v) => labelOf(SKIN_STATES, v);
 export const backingLabel = (v) => labelOf(BACKINGS, v);
 export const tabsLabel = (v) => labelOf(TAB_TYPES, v);
+export const activityLabel = (v) => labelOf(ACTIVITY_LEVELS, v);
+export const coreLabel = (v) => labelOf(CORE_CONDITIONS, v);
 
 // Per-unit cost from a product's pack cost / pack size, or null if either
 // is missing. Centralized so the inventory and insights agree.

@@ -5,7 +5,7 @@ import {
   PERFORMANCE, toLocalInputValue, fromLocalInputValue,
   productDisplayName, formatDuration,
 } from '../lib/helpers';
-import { CHANGE_REASONS, SKIN_STATES } from '../lib/session';
+import { CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS } from '../lib/session';
 
 // TakeOffForm — ends the active wear session. Records take-off time,
 // how it performed, and optional notes. A "then" choice lets the user
@@ -15,6 +15,8 @@ export default function TakeOffForm({
 }) {
   const [takenOffAt, setTakenOffAt] = useState(Date.now());
   const [performance, setPerformance] = useState('used');
+  const [activity, setActivity] = useState('');
+  const [core, setCore] = useState('');
   const [changeReason, setChangeReason] = useState('');
   const [skin, setSkin] = useState('');
   const [cream, setCream] = useState(false);
@@ -25,6 +27,8 @@ export default function TakeOffForm({
     if (open) {
       setTakenOffAt(Date.now());
       setPerformance('used');
+      setActivity('');
+      setCore('');
       setChangeReason('');
       setSkin('');
       setCream(false);
@@ -49,6 +53,8 @@ export default function TakeOffForm({
         ...entry,
         takenOffAt: effectiveOff,
         performance,
+        activity: activity || null,
+        core: core || null,
         changeReason: changeReason || null,
         skin: skin || null,
         cream: !!cream,
@@ -102,6 +108,38 @@ export default function TakeOffForm({
               >
                 <span style={{ flex: 1 }}>{p.label}</span>
                 {performance === p.value && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label">How active were you? (optional)</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {ACTIVITY_LEVELS.map((a) => (
+              <button
+                key={a.value} type="button"
+                className={`check-row ${activity === a.value ? 'active' : ''}`}
+                onClick={() => setActivity(activity === a.value ? '' : a.value)}
+              >
+                <span style={{ flex: 1 }}>{a.label}</span>
+                {activity === a.value && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label">How did the padding hold up? (optional)</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {CORE_CONDITIONS.map((c) => (
+              <button
+                key={c.value} type="button"
+                className={`check-row ${core === c.value ? 'active' : ''}`}
+                onClick={() => setCore(core === c.value ? '' : c.value)}
+              >
+                <span style={{ flex: 1 }}>{c.label}</span>
+                {core === c.value && <Check size={14} />}
               </button>
             ))}
           </div>

@@ -12,6 +12,7 @@
 //
 //   amount — how heavy the wetting was (light → very heavy)
 //   feel   — how the diaper felt afterwards (a saturation scale)
+//   core   — optional in-the-moment read on the padding itself (intact → breaking down)
 
 export const WETNESS = [
   { value: 'light',    label: 'Light',      weight: 1, order: 1 },
@@ -29,11 +30,23 @@ export const DIAPER_FEEL = [
   { value: 'saturated', label: 'Saturated — near its limit',    order: 5 },
 ];
 
+// Optional in-the-moment read on the core itself when you notice a wetting —
+// is the padding still intact, or starting to break down? Ordered
+// worst-ascending to line up with CORE_CONDITIONS recorded at take-off.
+export const CORE_FEEL = [
+  { value: 'firm',      label: 'Still firm',          order: 1 },
+  { value: 'softening', label: 'Softening',           order: 2 },
+  { value: 'clumping',  label: 'Clumping',            order: 3 },
+  { value: 'shifting',  label: 'Shifting / bunching', order: 4 },
+];
+
 export const wetnessMeta = (v) => WETNESS.find((w) => w.value === v) || null;
 export const feelMeta = (v) => DIAPER_FEEL.find((f) => f.value === v) || null;
+export const coreFeelMeta = (v) => CORE_FEEL.find((c) => c.value === v) || null;
 
 export const wetnessLabel = (v) => wetnessMeta(v)?.label || '—';
 export const feelLabel = (v) => feelMeta(v)?.label || '—';
+export const coreFeelLabel = (v) => coreFeelMeta(v)?.label || '—';
 
 // Always returns a time-sorted array, tolerant of older logs with no field.
 export const getWettings = (log) => {
