@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Sun, Moon, Check } from 'lucide-react';
-import { Modal } from './Common';
+import { Modal, ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import {
   ABSORBENCY, uid, guessPeriod,
   toLocalInputValue, fromLocalInputValue,
-  productDisplayName, stockAt,
+  stockAt, totalStock,
 } from '../lib/helpers';
 import { CONTEXTS } from '../lib/session';
+import { groupProducts } from '../lib/variants';
 
 // WearForm — "put one on". Creates an active wear session: a log entry
 // with putOnAt set and takenOffAt: null. Stock is decremented at the
@@ -41,6 +42,27 @@ export default function WearForm({
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const product = products.find((p) => p.id === form.productId);
+
+  // Variant grouping: pick a model first, then a variant within it.
+  const groups = groupProducts(products);
+  const currentGroup =
+    groups.find((g) => g.products.some((p) => p.id === form.productId)) || null;
+
+  // Select a specific product; drop the chosen location if it has no stock for it.
+  const selectProduct = (id) => setForm((f) => {
+    const np = products.find((p) => p.id === id);
+    const keepLoc = np && stockAt(np, f.locationId) > 0 ? f.locationId : '';
+    return { ...f, productId: id, locationId: keepLoc };
+  });
+
+  // Select a model (group); default to the variant with the most stock on hand.
+  const selectGroup = (key) => {
+    const g = groups.find((x) => x.key === key);
+    if (!g) return;
+    const best = [...g.products].sort((a, b) => totalStock(b) - totalStock(a))[0];
+    selectProduct(best?.id || g.products[0].id);
+  };
+
   const availableLocations = locations
     .filter((loc) => stockAt(product, loc.id) > 0)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
@@ -99,16 +121,47 @@ export default function WearForm({
           <label className="label">Which product?</label>
           <select
             className="select"
-            value={form.productId}
-            onChange={(e) => update('productId', e.target.value)}
+            value={currentGroup?.key || ''}
+            onChange={(e) => selectGroup(e.target.value)}
           >
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {productDisplayName(p)} — {p.size}, {ABSORBENCY.find((a) => a.value === p.absorbency)?.label}
+            {groups.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.label}{g.isMulti ? ` · ${g.products.length} variants` : ''}
               </option>
             ))}
           </select>
+          {product && (
+            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
+              {product.size} · {ABSORBENCY.find((a) => a.value === product.absorbency)?.label}
+            </div>
+          )}
         </div>
+
+        {currentGroup?.isMulti && (
+          <div>
+            <label className="label">Which variant?</label>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {currentGroup.products.map((p) => {
+                const st = totalStock(p);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`check-row ${form.productId === p.id ? 'active' : ''}`}
+                    onClick={() => selectProduct(p.id)}
+                  >
+                    <ProductThumb product={p} size={20} />
+                    <span style={{ flex: 1 }}>{(p.print && p.print.trim()) || 'Default'}</span>
+                    <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
+                      {st} total
+                    </span>
+                    {form.productId === p.id && <Check size={14} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div>
           <label className="label">Taking it from where?</label>
