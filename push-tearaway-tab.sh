@@ -1,3 +1,10 @@
+#!/usr/bin/env bash
+# Ledger - add tear-away tab option (for pull-ups). Safe to re-run.
+set -e
+cd ~/ledger-app
+
+mkdir -p "src/lib"
+cat > src/lib/session.js << 'LEDGER_EOF'
 // Wear-session metadata — the small vocabularies for context, change
 // reason, and skin check. Kept in its own module (not helpers.js) so these
 // shared constants live in one place and can grow without touching helpers.
@@ -72,3 +79,11 @@ export const fmtMoney = (n) =>
   n == null || !Number.isFinite(n)
     ? '—'
     : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+LEDGER_EOF
+
+git add -A
+git commit -m "Add tear-away tab option for pull-ups" || echo "Nothing new to commit - pushing current state."
+git push
+echo
+echo "Pushed to master. Netlify will auto-deploy in ~1-2 min."
+echo "Then tap Sync on the GitHub source in project knowledge."
