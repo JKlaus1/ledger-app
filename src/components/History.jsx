@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote } from 'lucide-react';
+import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote, Repeat } from 'lucide-react';
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
@@ -238,6 +238,8 @@ export default function History({
                     // Wettings attach to wear sessions (a use with a put-on time),
                     // whether that diaper is on now or was worn previously.
                     const isWearSession = !isMove && !!l.putOnAt;
+                    // A put-on that directly followed an explicit/auto-linked take-off.
+                    const isChangeOut = isWearSession && !!l.changedFromId;
 
                     return (
                       <div
@@ -262,8 +264,15 @@ export default function History({
                           />
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14 }}>
-                            {p ? productDisplayName(p) : <span style={{ color: 'var(--ink-mute)' }}>Removed product</span>}
+                          <div style={{ fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {isChangeOut && (
+                              <span style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Repeat size={12} /> Changed into
+                              </span>
+                            )}
+                            <span>
+                              {p ? productDisplayName(p) : <span style={{ color: 'var(--ink-mute)' }}>Removed product</span>}
+                            </span>
                           </div>
                           <div style={{
                             fontSize: 12, color: 'var(--ink-mute)',

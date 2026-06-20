@@ -89,6 +89,11 @@ export const activityLabel = (v) => labelOf(ACTIVITY_LEVELS, v);
 export const coreLabel = (v) => labelOf(CORE_CONDITIONS, v);
 export const tapeLabel = (v) => labelOf(TAPE_STATES, v);
 
+// A put-on within this many ms after a take-off is treated as a direct
+// change-out (not a fresh wear with a gap). Used both by explicit "change into"
+// flows and the auto-link fallback for separate take-off + put-on actions.
+export const CHANGE_OUT_WINDOW_MS = 10 * 60 * 1000;
+
 // Per-unit cost from a product's pack cost / pack size, or null if either
 // is missing. Centralized so the inventory and insights agree.
 export const unitCost = (product) => {
