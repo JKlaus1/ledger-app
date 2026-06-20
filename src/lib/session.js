@@ -67,6 +67,17 @@ export const CORE_CONDITIONS = [
   { value: 'broke',    label: 'Broke apart',       order: 4 },
 ];
 
+// Did the tapes/fasteners give trouble? Distinct from a product's `tabs`
+// (which is the tab TYPE — taped/velcro/tearaway); this is behavior on a
+// given wear. Shared by the take-off summary and per-wetting notes, ordered
+// worst-ascending so it can later be cross-tabbed against tab type.
+export const TAPE_STATES = [
+  { value: 'held',     label: 'Held fine',                    order: 1 },
+  { value: 'loosened', label: 'Loosened / needed a re-press', order: 2 },
+  { value: 'popped',   label: 'A tab popped open',            order: 3 },
+  { value: 'failed',   label: 'Tab failed (tore / lost stick)', order: 4 },
+];
+
 const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 
 export const contextLabel = (v) => labelOf(CONTEXTS, v);
@@ -76,6 +87,7 @@ export const backingLabel = (v) => labelOf(BACKINGS, v);
 export const tabsLabel = (v) => labelOf(TAB_TYPES, v);
 export const activityLabel = (v) => labelOf(ACTIVITY_LEVELS, v);
 export const coreLabel = (v) => labelOf(CORE_CONDITIONS, v);
+export const tapeLabel = (v) => labelOf(TAPE_STATES, v);
 
 // Per-unit cost from a product's pack cost / pack size, or null if either
 // is missing. Centralized so the inventory and insights agree.

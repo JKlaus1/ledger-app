@@ -5,7 +5,7 @@ import {
   PERFORMANCE, toLocalInputValue, fromLocalInputValue,
   productDisplayName, formatDuration,
 } from '../lib/helpers';
-import { CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS } from '../lib/session';
+import { CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS, TAPE_STATES } from '../lib/session';
 
 // TakeOffForm — ends the active wear session. Records take-off time,
 // how it performed, and optional notes. A "then" choice lets the user
@@ -17,6 +17,7 @@ export default function TakeOffForm({
   const [performance, setPerformance] = useState('used');
   const [activity, setActivity] = useState('');
   const [core, setCore] = useState('');
+  const [tapes, setTapes] = useState('');
   const [changeReason, setChangeReason] = useState('');
   const [skin, setSkin] = useState('');
   const [cream, setCream] = useState(false);
@@ -29,6 +30,7 @@ export default function TakeOffForm({
       setPerformance('used');
       setActivity('');
       setCore('');
+      setTapes('');
       setChangeReason('');
       setSkin('');
       setCream(false);
@@ -55,6 +57,7 @@ export default function TakeOffForm({
         performance,
         activity: activity || null,
         core: core || null,
+        tapes: tapes || null,
         changeReason: changeReason || null,
         skin: skin || null,
         cream: !!cream,
@@ -140,6 +143,22 @@ export default function TakeOffForm({
               >
                 <span style={{ flex: 1 }}>{c.label}</span>
                 {core === c.value && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Any tape trouble? (optional)</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {TAPE_STATES.map((t) => (
+              <button
+                key={t.value} type="button"
+                className={`check-row ${tapes === t.value ? 'active' : ''}`}
+                onClick={() => setTapes(tapes === t.value ? '' : t.value)}
+              >
+                <span style={{ flex: 1 }}>{t.label}</span>
+                {tapes === t.value && <Check size={14} />}
               </button>
             ))}
           </div>

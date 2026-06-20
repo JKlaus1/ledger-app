@@ -9,6 +9,7 @@ import {
   WETNESS, DIAPER_FEEL, CORE_FEEL, getWettings, wettingStats,
   wetnessLabel, feelLabel, coreFeelLabel,
 } from '../lib/wetting';
+import { TAPE_STATES, tapeLabel } from '../lib/session';
 
 // WettingSummary — compact, reusable read-out of a wear session's wettings.
 // Used on the dashboard's "currently wearing" card and in History rows.
@@ -73,6 +74,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
   const [amount, setAmount] = useState('');
   const [feel, setFeel] = useState('');
   const [core, setCore] = useState('');
+  const [tapes, setTapes] = useState('');
   const [note, setNote] = useState('');
 
   const defaultAt = () => {
@@ -87,6 +89,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
     setAmount('');
     setFeel('');
     setCore('');
+    setTapes('');
     setNote('');
   };
 
@@ -111,10 +114,10 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
     if (!amount) return;
     if (editingId) {
       persist(list.map((w) =>
-        w.id === editingId ? { ...w, at, amount, feel: feel || null, core: core || null, note: note.trim() } : w
+        w.id === editingId ? { ...w, at, amount, feel: feel || null, core: core || null, tapes: tapes || null, note: note.trim() } : w
       ));
     } else {
-      persist([...list, { id: uid(), at, amount, feel: feel || null, core: core || null, note: note.trim() }]);
+      persist([...list, { id: uid(), at, amount, feel: feel || null, core: core || null, tapes: tapes || null, note: note.trim() }]);
     }
     resetSubForm();
   };
@@ -125,6 +128,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
     setAmount(w.amount || '');
     setFeel(w.feel || '');
     setCore(w.core || '');
+    setTapes(w.tapes || '');
     setNote(w.note || '');
   };
 
@@ -177,6 +181,9 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
                       )}
                       {w.core && (
                         <span style={{ color: 'var(--ink-mute)' }}> · core {coreFeelLabel(w.core).toLowerCase()}</span>
+                      )}
+                      {w.tapes && (
+                        <span style={{ color: 'var(--ink-mute)' }}> · tapes {tapeLabel(w.tapes).toLowerCase()}</span>
                       )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 1 }}>
@@ -253,6 +260,22 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
                 >
                   <span style={{ flex: 1 }}>{c.label}</span>
                   {core === c.value && <Check size={14} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Tape trouble? (optional)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {TAPE_STATES.map((t) => (
+                <button
+                  key={t.value} type="button"
+                  className={`check-row ${tapes === t.value ? 'active' : ''}`}
+                  onClick={() => setTapes(tapes === t.value ? '' : t.value)}
+                >
+                  <span style={{ flex: 1 }}>{t.label}</span>
+                  {tapes === t.value && <Check size={14} />}
                 </button>
               ))}
             </div>

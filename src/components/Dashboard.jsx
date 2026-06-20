@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock, Droplets } from 'lucide-react';
+import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock, Droplets, StickyNote } from 'lucide-react';
 import { ProductThumb, Eyebrow, SectionHeader, Pill } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
@@ -13,7 +13,7 @@ export default function Dashboard({
   products, logs, locations, thumbs, activeWear,
   onAddProduct, onAddLocation,
   onPutOn, onChangeOut, onTakeOff, onUndoWear, onLogWetting,
-  onRestock, onMove, onPhotoTap,
+  onRestock, onMove, onAddNote, onPhotoTap,
 }) {
   const today = new Date();
 
@@ -123,6 +123,14 @@ export default function Dashboard({
         </div>
       </section>
 
+      <button
+        className="btn btn-ghost"
+        onClick={() => onAddNote()}
+        style={{ width: '100%' }}
+      >
+        <StickyNote size={15} /> Add a note
+      </button>
+
       {/* Currently wearing */}
       {activeWear && (() => {
         const wp = products.find((p) => p.id === activeWear.productId);
@@ -176,6 +184,18 @@ export default function Dashboard({
                 style={{ width: '100%', marginTop: 14 }}
               >
                 <Droplets size={15} /> Log a wetting
+              </button>
+
+              <button
+                className="btn btn-ghost"
+                onClick={() => onAddNote({
+                  productId: activeWear.productId,
+                  locationId: activeWear.locationId,
+                  sessionId: activeWear.id,
+                })}
+                style={{ width: '100%', marginTop: 8 }}
+              >
+                <StickyNote size={15} /> Note on this diaper
               </button>
 
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>

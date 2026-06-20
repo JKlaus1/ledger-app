@@ -20,6 +20,7 @@ import LocationManager from './components/LocationManager';
 import Settings from './components/Settings';
 import PhotoViewer from './components/PhotoViewer';
 import WettingForm from './components/WettingForm';
+import NoteForm from './components/NoteForm';
 
 import {
   getAllProducts, getAllLocations, getAllLogs, getAllThumbs,
@@ -60,6 +61,11 @@ export default function App() {
 
   // Wetting tracking modal — holds the wear-session log being edited
   const [wettingEntry, setWettingEntry] = useState(null);
+
+  // Note log modal
+  const [noteFormOpen, setNoteFormOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteContext, setNoteContext] = useState(null);
 
   const [moveFormOpen, setMoveFormOpen] = useState(false);
   const [moveProductId, setMoveProductId] = useState(null);
@@ -317,6 +323,23 @@ export default function App() {
     setMoveFormOpen(true);
   };
 
+  // Note logs (type: 'note') — free-standing or attached to the diaper on now.
+  const handleSaveNote = async (note) => {
+    const exists = logs.find((l) => l.id === note.id);
+    await saveLog(note);
+    setLogs(exists ? logs.map((l) => (l.id === note.id ? note : l)) : [...logs, note]);
+    setNoteFormOpen(false);
+    setEditingNote(null);
+    setNoteContext(null);
+    setToastMsg(exists ? 'Note updated' : 'Note added');
+  };
+
+  const openNoteForm = (context) => {
+    setEditingNote(null);
+    setNoteContext(context || null);
+    setNoteFormOpen(true);
+  };
+
   const tabs = [
     { v: 'home', label: 'Today', icon: LayoutDashboard },
     { v: 'inventory', label: 'Inventory', icon: Package },
@@ -435,6 +458,7 @@ export default function App() {
             onLogWetting={(entry) => setWettingEntry(entry)}
             onRestock={(p) => setRestockProduct(p)}
             onMove={openMoveForm}
+            onAddNote={openNoteForm}
             onPhotoTap={setPhotoViewerProductId}
           />
         )}
@@ -453,7 +477,10 @@ export default function App() {
         {tab === 'history' && (
           <History
             logs={logs} products={products} locations={locations} thumbs={thumbs}
-            onEdit={(l) => { setEditingLog(l); setLogFormOpen(true); }}
+            onEdit={(l) => {
+              if (l.type === 'note') { setEditingNote(l); setNoteContext(null); setNoteFormOpen(true); }
+              else { setEditingLog(l); setLogFormOpen(true); }
+            }}
             onDelete={(l) => setConfirmDeleteLog(l)}
             onManageWettings={(l) => setWettingEntry(l)}
             onPhotoTap={setPhotoViewerProductId}
@@ -539,6 +566,16 @@ export default function App() {
         entry={wettingEntry ? (logs.find((l) => l.id === wettingEntry.id) || wettingEntry) : null}
         product={wettingEntry ? products.find((p) => p.id === wettingEntry.productId) : null}
         onSave={handleSaveWettings}
+      />
+
+      <NoteForm
+        open={noteFormOpen}
+        onClose={() => { setNoteFormOpen(false); setEditingNote(null); setNoteContext(null); }}
+        onSave={handleSaveNote}
+        initial={editingNote}
+        context={noteContext}
+        locations={locations}
+        products={products}
       />
 
       <MoveForm

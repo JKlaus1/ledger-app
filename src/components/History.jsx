@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets } from 'lucide-react';
+import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote } from 'lucide-react';
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
@@ -22,15 +22,20 @@ export default function History({
     (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
   );
 
+  const sortedProducts = [...products].sort(
+    (a, b) => productDisplayName(a).localeCompare(productDisplayName(b))
+  );
+
   const filtered = useMemo(() => {
     return logs
       .filter((l) => {
-        if (typeFilter === 'use' && l.type === 'move') return false;
-        if (typeFilter === 'move' && l.type !== 'move') return false;
+        if (typeFilter === 'use') return l.type !== 'move' && l.type !== 'note';
+        if (typeFilter === 'move') return l.type === 'move';
+        if (typeFilter === 'note') return l.type === 'note';
         return true;
       })
       .filter((l) => {
-        if (l.type === 'move') return periodFilter === 'all';
+        if (l.type === 'move' || l.type === 'note') return periodFilter === 'all';
         return periodFilter === 'all' || l.period === periodFilter;
       })
       .filter((l) => productFilter === 'all' || l.productId === productFilter)
@@ -61,7 +66,7 @@ export default function History({
         <ClipboardList size={28} style={{ color: 'var(--ink-mute)' }} />
         <div className="display" style={{ fontSize: 22, marginTop: 12 }}>No history yet</div>
         <p style={{ marginTop: 8, color: 'var(--ink-soft)' }}>
-          Logged uses and moves will appear here.
+          Logged uses, moves, and notes will appear here.
         </p>
       </div>
     );
@@ -94,8 +99,14 @@ export default function History({
           >
             Moves
           </button>
+          <button
+            className={`seg-btn ${typeFilter === 'note' ? 'active' : ''}`}
+            onClick={() => setTypeFilter('note')}
+          >
+            Notes
+          </button>
         </div>
-        {typeFilter !== 'move' && (
+        {typeFilter !== 'move' && typeFilter !== 'note' && (
           <div className="seg">
             <button
               className={`seg-btn ${periodFilter === 'all' ? 'active' : ''}`}
@@ -127,7 +138,7 @@ export default function History({
           onChange={(e) => setProductFilter(e.target.value)}
         >
           <option value="all">All products</option>
-          {products.map((p) => (
+          {sortedProducts.map((p) => (
             <option key={p.id} value={p.id}>{productDisplayName(p)}</option>
           ))}
         </select>
@@ -174,6 +185,51 @@ export default function History({
 
                 <div className="card" style={{ padding: 4 }}>
                   {entries.map((l) => {
+                    if (l.type === 'note') {
+                      const np = l.productId ? products.find((x) => x.id === l.productId) : null;
+                      const nloc = l.locationId ? locations.find((x) => x.id === l.locationId) : null;
+                      return (
+                        <div
+                          key={l.id}
+                          className="row-divider"
+                          style={{
+                            padding: '12px 14px',
+                            display: 'flex', alignItems: 'flex-start', gap: 12,
+                          }}
+                        >
+                          <div style={{
+                            width: 56, fontSize: 13, color: 'var(--ink-soft)',
+                            paddingTop: 1, fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {formatTime(l.timestamp)}
+                          </div>
+                          <div style={{ marginTop: 2, color: 'var(--accent)', flexShrink: 0 }}>
+                            <StickyNote size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, whiteSpace: 'pre-wrap' }}>{l.text}</div>
+                            <div style={{
+                              fontSize: 12, color: 'var(--ink-mute)',
+                              marginTop: 4, display: 'flex', alignItems: 'center', gap: 6,
+                              flexWrap: 'wrap',
+                            }}>
+                              <span style={{ color: 'var(--accent)' }}>Note</span>
+                              {np && <><span>·</span><span>{productDisplayName(np)}</span></>}
+                              {nloc && <><span>·</span><LocationIcon name={nloc.icon} size={11} /><span>{nloc.name}</span></>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            <button className="btn-icon" onClick={() => onEdit(l)} aria-label="Edit note">
+                              <Pencil size={14} />
+                            </button>
+                            <button className="btn-icon" onClick={() => onDelete(l)} aria-label="Delete note">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const p = products.find((x) => x.id === l.productId);
                     const isMove = l.type === 'move';
                     const fromLoc = isMove ? locations.find((loc) => loc.id === l.fromLocationId) : null;
