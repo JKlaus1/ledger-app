@@ -185,6 +185,13 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
         }
       });
     });
+    // Standalone toilet logs (toilet trips with no diaper on) count too.
+    usageLogs.filter((l) => l.type === 'toilet').forEach((l) => {
+      toilet += 1;
+      if (l.what === 'pee') toiletPee += 1;
+      else if (l.what === 'bm') toiletBM += 1;
+      else if (l.what === 'both') toiletBoth += 1;
+    });
     const controlTotal = control.voluntary + control.couldnt_hold + control.accident;
     return { toilet, bm, control, controlTotal, toiletPee, toiletBM, toiletBoth,
       any: toilet > 0 || bm > 0 || controlTotal > 0 };

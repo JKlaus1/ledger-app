@@ -22,6 +22,7 @@ import PhotoViewer from './components/PhotoViewer';
 import WettingForm from './components/WettingForm';
 import NoteForm from './components/NoteForm';
 import DrinkForm from './components/DrinkForm';
+import ToiletForm from './components/ToiletForm';
 import { DEFAULT_DRINK_PRESETS, normalizeDrinkPresets } from './lib/intake';
 import { CHANGE_OUT_WINDOW_MS } from './lib/session';
 
@@ -76,6 +77,9 @@ export default function App() {
 
   const [drinkFormOpen, setDrinkFormOpen] = useState(false);
   const [editingDrink, setEditingDrink] = useState(null);
+
+  const [toiletFormOpen, setToiletFormOpen] = useState(false);
+  const [editingToilet, setEditingToilet] = useState(null);
 
   const [moveFormOpen, setMoveFormOpen] = useState(false);
   const [moveProductId, setMoveProductId] = useState(null);
@@ -401,6 +405,21 @@ export default function App() {
     setDrinkFormOpen(true);
   };
 
+  // Toilet logs (type: 'toilet') — a toilet use logged with no diaper on.
+  const handleSaveToilet = async (entry) => {
+    const exists = logs.find((l) => l.id === entry.id);
+    await saveLog(entry);
+    setLogs(exists ? logs.map((l) => (l.id === entry.id ? entry : l)) : [...logs, entry]);
+    setToiletFormOpen(false);
+    setEditingToilet(null);
+    setToastMsg(exists ? 'Toilet use updated' : 'Toilet use logged');
+  };
+
+  const openToiletForm = () => {
+    setEditingToilet(null);
+    setToiletFormOpen(true);
+  };
+
   const tabs = [
     { v: 'home', label: 'Today', icon: LayoutDashboard },
     { v: 'inventory', label: 'Inventory', icon: Package },
@@ -521,6 +540,7 @@ export default function App() {
             onMove={openMoveForm}
             onAddNote={openNoteForm}
             onAddDrink={openDrinkForm}
+            onAddToilet={openToiletForm}
             onPhotoTap={setPhotoViewerProductId}
           />
         )}
@@ -542,6 +562,7 @@ export default function App() {
             onEdit={(l) => {
               if (l.type === 'note') { setEditingNote(l); setNoteContext(null); setNoteFormOpen(true); }
               else if (l.type === 'drink') { setEditingDrink(l); setDrinkFormOpen(true); }
+              else if (l.type === 'toilet') { setEditingToilet(l); setToiletFormOpen(true); }
               else { setEditingLog(l); setLogFormOpen(true); }
             }}
             onDelete={(l) => setConfirmDeleteLog(l)}
@@ -649,6 +670,13 @@ export default function App() {
         onSave={handleSaveDrink}
         initial={editingDrink}
         presets={drinkPresets}
+      />
+
+      <ToiletForm
+        open={toiletFormOpen}
+        onClose={() => { setToiletFormOpen(false); setEditingToilet(null); }}
+        onSave={handleSaveToilet}
+        initial={editingToilet}
       />
 
       <MoveForm

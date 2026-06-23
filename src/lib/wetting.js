@@ -86,6 +86,11 @@ export const kindLabel = (v) => EVENT_KINDS.find((k) => k.value === v)?.label ||
 export const controlLabel = (v) => CONTROL_LEVELS.find((c) => c.value === v)?.label || null;
 export const toiletWhatLabel = (v) => TOILET_WHAT.find((t) => t.value === v)?.label || null;
 
+// A standalone toilet-use log (type: 'toilet') — used to record a toilet trip
+// when no diaper is on. Distinct from an inline 'toilet' event on a worn
+// session. Both are counted together in insights.
+export const isToiletLog = (l) => !!l && l.type === 'toilet';
+
 // Always returns a time-sorted array, tolerant of older logs with no field.
 export const getWettings = (log) => {
   if (!log || !Array.isArray(log.wettings)) return [];

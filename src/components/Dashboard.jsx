@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock, Droplets, StickyNote, GlassWater } from 'lucide-react';
+import { Plus, ChevronRight, Sun, Moon, ArrowRight, Repeat, X, Clock, Droplets, StickyNote, GlassWater, Toilet } from 'lucide-react';
 import { ProductThumb, Eyebrow, SectionHeader, Pill } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
@@ -13,7 +13,7 @@ export default function Dashboard({
   products, logs, locations, thumbs, activeWear,
   onAddProduct, onAddLocation,
   onPutOn, onChangeOut, onTakeOff, onUndoWear, onLogWetting,
-  onRestock, onMove, onAddNote, onAddDrink, onPhotoTap,
+  onRestock, onMove, onAddNote, onAddDrink, onAddToilet, onPhotoTap,
 }) {
   const today = new Date();
 
@@ -129,14 +129,21 @@ export default function Dashboard({
           onClick={() => onAddNote()}
           style={{ flex: 1 }}
         >
-          <StickyNote size={15} /> Add a note
+          <StickyNote size={15} /> Note
         </button>
         <button
           className="btn btn-ghost"
           onClick={() => onAddDrink && onAddDrink()}
           style={{ flex: 1 }}
         >
-          <GlassWater size={15} /> Log a drink
+          <GlassWater size={15} /> Drink
+        </button>
+        <button
+          className="btn btn-ghost"
+          onClick={() => onAddToilet && onAddToilet()}
+          style={{ flex: 1 }}
+        >
+          <Toilet size={15} /> Toilet
         </button>
       </div>
 

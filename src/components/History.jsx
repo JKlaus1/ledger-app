@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote, Repeat, GlassWater } from 'lucide-react';
+import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote, Repeat, GlassWater, Toilet } from 'lucide-react';
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
 import { contextLabel, reasonLabel } from '../lib/session';
+import { isToiletLog, toiletWhatLabel } from '../lib/wetting';
 import { isDrink, drinkKindLabel, drinkSizeLabel } from '../lib/intake';
 import {
   formatDate, formatTime, dayKey, productDisplayName,
@@ -30,14 +31,14 @@ export default function History({
   const filtered = useMemo(() => {
     return logs
       .filter((l) => {
-        if (typeFilter === 'use') return l.type !== 'move' && l.type !== 'note' && l.type !== 'drink';
+        if (typeFilter === 'use') return l.type !== 'move' && l.type !== 'note' && l.type !== 'drink' && l.type !== 'toilet';
         if (typeFilter === 'move') return l.type === 'move';
         if (typeFilter === 'note') return l.type === 'note';
         if (typeFilter === 'drink') return l.type === 'drink';
         return true;
       })
       .filter((l) => {
-        if (l.type === 'move' || l.type === 'note' || l.type === 'drink') return periodFilter === 'all';
+        if (l.type === 'move' || l.type === 'note' || l.type === 'drink' || l.type === 'toilet') return periodFilter === 'all';
         return periodFilter === 'all' || l.period === periodFilter;
       })
       .filter((l) => productFilter === 'all' || l.productId === productFilter)
@@ -193,6 +194,47 @@ export default function History({
 
                 <div className="card" style={{ padding: 4 }}>
                   {entries.map((l) => {
+                    if (isToiletLog(l)) {
+                      return (
+                        <div
+                          key={l.id}
+                          className="row-divider"
+                          style={{
+                            padding: '12px 14px',
+                            display: 'flex', alignItems: 'flex-start', gap: 12,
+                          }}
+                        >
+                          <div style={{
+                            width: 56, fontSize: 13, color: 'var(--ink-soft)',
+                            paddingTop: 1, fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {formatTime(l.timestamp)}
+                          </div>
+                          <div style={{ marginTop: 2, color: 'var(--primary)', flexShrink: 0 }}>
+                            <Toilet size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14 }}>
+                              Toilet use
+                              {l.what && <span style={{ color: 'var(--ink-mute)' }}> · {(toiletWhatLabel(l.what) || '').toLowerCase()}</span>}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 4 }}>
+                              <span style={{ color: 'var(--primary)' }}>No diaper</span>
+                              {l.context && <span> · {contextLabel(l.context) || l.context}</span>}
+                              {l.note && <span> · {l.note}</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            <button className="btn-icon" onClick={() => onEdit(l)} aria-label="Edit toilet use">
+                              <Pencil size={14} />
+                            </button>
+                            <button className="btn-icon" onClick={() => onDelete(l)} aria-label="Delete toilet use">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     if (isDrink(l)) {
                       return (
                         <div
