@@ -15,7 +15,7 @@ import {
 } from '../lib/wetting';
 import {
   CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
-  LEAK_ESCAPE, LEAK_SEVERITY,
+  LEAK_ESCAPE, LEAK_SEVERITY, isWearLog,
 } from '../lib/session';
 import { isDrink, DRINK_KINDS, drinkKindLabel, drinkVolumeOz } from '../lib/intake';
 
@@ -27,9 +27,8 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
   // entry that predates it. We surface how many predate the detailed schema so
   // sections that need putOnAt (timing, wettings, context) are read against
   // the right denominator instead of looking artificially sparse.
-  const isWear = (l) => l.type === 'use' || (!l.type && (l.putOnAt || l.period));
   const legacyInfo = useMemo(() => {
-    const wears = logs.filter(isWear);
+    const wears = logs.filter(isWearLog);
     const detailed = wears.filter((l) => l.putOnAt);
     return { total: wears.length, detailed: detailed.length, legacy: wears.length - detailed.length };
   }, [logs]);
@@ -293,9 +292,10 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       .sort((a, b) => b.count - a.count);
   }, [usageLogs, locations]);
 
-  // Stats
-  const totalUses = usageLogs.length;
-  const firstLog = usageLogs.length ? Math.min(...usageLogs.map((l) => l.timestamp)) : null;
+  // Stats — "uses" means diapers put on, not every logged event.
+  const wearLogs = logs.filter(isWearLog);
+  const totalUses = wearLogs.length;
+  const firstLog = wearLogs.length ? Math.min(...wearLogs.map((l) => l.timestamp)) : null;
   const trackingDays = firstLog
     ? Math.max(1, Math.ceil((Date.now() - firstLog) / (24 * 3600 * 1000)))
     : 0;

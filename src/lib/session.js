@@ -121,6 +121,13 @@ export const leakEscapeLabel = (v) => labelOf(LEAK_ESCAPE, v);
 export const leakSeverityLabel = (v) => labelOf(LEAK_SEVERITY, v);
 export const cleanupLabel = (v) => labelOf(CLEANUP_METHODS, v);
 
+// A wear/use log: a diaper actually put on (stock decrements at put-on). The
+// modern kind has type 'use'; older entries predate the type field but carry a
+// putOnAt time or a day/night period. Notes, drinks, toilet logs and moves are
+// NOT wears — counting them as "uses" inflates daily/total use stats.
+export const isWearLog = (l) =>
+  !!(l && (l.type === 'use' || (!l.type && (l.putOnAt || l.period))));
+
 // A put-on within this many ms after a take-off is treated as a direct
 // change-out (not a fresh wear with a gap). Used both by explicit "change into"
 // flows and the auto-link fallback for separate take-off + put-on actions.

@@ -8,6 +8,7 @@ import {
   productDisplayName, totalStock, formatDuration, wearDuration,
 } from '../lib/helpers';
 import { groupProducts, groupKeyOf } from '../lib/variants';
+import { isWearLog } from '../lib/session';
 
 export default function Dashboard({
   products, logs, locations, thumbs, activeWear,
@@ -25,9 +26,10 @@ export default function Dashboard({
     return () => clearInterval(t);
   }, [activeWear]);
 
-  // "Real" usage logs (not moves)
-  const usageLogs = logs.filter((l) => l.type !== 'move');
-  const todayLogs = usageLogs.filter((l) => isToday(l.timestamp));
+  // Wear logs only — diapers actually put on. Notes, drinks, toilet logs and
+  // moves are not "uses" and must not inflate the today / most-used counts.
+  const wearLogs = logs.filter(isWearLog);
+  const todayLogs = wearLogs.filter((l) => isToday(l.timestamp));
   const grandTotal = products.reduce((s, p) => s + totalStock(p), 0);
 
   // Low stock = total across all locations <= 5 (matches spirit of original)
@@ -42,7 +44,7 @@ export default function Dashboard({
     const groups = groupProducts(products);
     const byKey = new Map(groups.map((g) => [g.key, g]));
     const counts = new Map();
-    usageLogs.filter((l) => l.timestamp >= cutoff).forEach((l) => {
+    wearLogs.filter((l) => l.timestamp >= cutoff).forEach((l) => {
       const p = products.find((x) => x.id === l.productId);
       if (!p) return;
       const k = groupKeyOf(p);
@@ -53,7 +55,7 @@ export default function Dashboard({
       .map(([k]) => byKey.get(k))
       .filter((g) => g && g.total > 0)
       .slice(0, 3);
-  }, [usageLogs, products]);
+  }, [wearLogs, products]);
 
   const recentLogs = [...logs]
     .sort((a, b) => b.timestamp - a.timestamp)
