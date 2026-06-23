@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Check, X, Droplets, Droplet, Pencil } from 'lucide-react';
+import { Check, X, Droplets, Droplet, Pencil, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { Modal } from './Common';
 import {
   uid, toLocalInputValue, fromLocalInputValue,
   productDisplayName, formatTime, formatDuration, wearDuration,
 } from '../lib/helpers';
 import {
-  WETNESS, DIAPER_FEEL, CORE_FEEL, getWettings, wettingStats,
-  wetnessLabel, feelLabel, coreFeelLabel,
+  WETNESS, DIAPER_FEEL, CORE_FEEL, POSTURES, getWettings, wettingStats,
+  wetnessLabel, feelLabel, coreFeelLabel, postureLabel,
+  capacityProfile, globalCapacity, capacityStatus,
 } from '../lib/wetting';
 import { TAPE_STATES, tapeLabel } from '../lib/session';
 
@@ -64,10 +65,59 @@ export function WettingSummary({ log, compact = false, style = {} }) {
   );
 }
 
+// CapacityMeter — shows how close this diaper's running load is to the point
+// it (or similar diapers) have historically leaked. Quiet when there's no
+// basis to judge yet; turns amber on approach and red once at/over the line.
+function CapacityMeter({ load, status, isOn }) {
+  if (status.level === 'none' || load <= 0) return null;
+
+  const palette = {
+    ok:    { bar: 'var(--primary)', fg: 'var(--ink-soft)',  Icon: ShieldCheck },
+    watch: { bar: '#C9985A',        fg: '#9A6A2E',          Icon: AlertTriangle },
+    over:  { bar: 'var(--danger)',  fg: 'var(--danger)',    Icon: AlertTriangle },
+  }[status.level];
+  const { bar, fg, Icon } = palette;
+
+  const pct = Math.max(6, Math.min(100, Math.round((status.ratio || 0) * 100)));
+  const where = status.fromProduct ? 'this diaper' : 'similar diapers';
+  const ceilTxt = Number.isInteger(status.ceiling) ? status.ceiling : status.ceiling.toFixed(1);
+
+  let msg;
+  if (status.level === 'over') {
+    msg = status.basis === 'leak'
+      ? `At/over the load ${where} has leaked at (~${ceilTxt}).${isOn ? ' Consider changing soon.' : ''}`
+      : `Past the most ${where} held dry (${ceilTxt}) — uncharted territory.`;
+  } else if (status.level === 'watch') {
+    msg = status.basis === 'leak'
+      ? `Nearing the load ${where} has leaked at (~${ceilTxt}).`
+      : `Approaching the most ${where} held dry (${ceilTxt}).`;
+  } else {
+    msg = status.basis === 'leak'
+      ? `Comfortably under the ~${ceilTxt} load ${where} has leaked at.`
+      : `Under the ${ceilTxt} load ${where} has held dry.`;
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: fg }}>
+        <Icon size={13} />
+        <span style={{ flex: 1 }}>{msg}</span>
+        <span className="num" style={{ color: fg }}>{load}</span>
+      </div>
+      <div style={{
+        height: 4, background: 'var(--line-soft)',
+        borderRadius: 3, marginTop: 6, overflow: 'hidden',
+      }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: bar, borderRadius: 3 }} />
+      </div>
+    </div>
+  );
+}
+
 // WettingForm — add / edit / remove wettings on a single wear session.
 // Works for the diaper currently on, or any previously worn one. Persists
 // immediately via onSave(logId, wettings) so nothing is lost on close.
-export default function WettingForm({ open, onClose, entry, product, onSave }) {
+export default function WettingForm({ open, onClose, entry, product, onSave, logs = [] }) {
   const [list, setList] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [at, setAt] = useState(Date.now());
@@ -75,6 +125,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
   const [feel, setFeel] = useState('');
   const [core, setCore] = useState('');
   const [tapes, setTapes] = useState('');
+  const [posture, setPosture] = useState('');
   const [note, setNote] = useState('');
 
   const defaultAt = () => {
@@ -90,6 +141,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
     setFeel('');
     setCore('');
     setTapes('');
+    setPosture('');
     setNote('');
   };
 
@@ -112,12 +164,16 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
 
   const addOrUpdate = () => {
     if (!amount) return;
+    const fields = {
+      at, amount,
+      feel: feel || null, core: core || null,
+      tapes: tapes || null, posture: posture || null,
+      note: note.trim(),
+    };
     if (editingId) {
-      persist(list.map((w) =>
-        w.id === editingId ? { ...w, at, amount, feel: feel || null, core: core || null, tapes: tapes || null, note: note.trim() } : w
-      ));
+      persist(list.map((w) => (w.id === editingId ? { ...w, ...fields } : w)));
     } else {
-      persist([...list, { id: uid(), at, amount, feel: feel || null, core: core || null, tapes: tapes || null, note: note.trim() }]);
+      persist([...list, { id: uid(), ...fields }]);
     }
     resetSubForm();
   };
@@ -129,6 +185,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
     setFeel(w.feel || '');
     setCore(w.core || '');
     setTapes(w.tapes || '');
+    setPosture(w.posture || '');
     setNote(w.note || '');
   };
 
@@ -139,6 +196,18 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
 
   const stats = wettingStats({ ...entry, wettings: list });
   const dur = wearDuration(entry);
+
+  // Live capacity read: compare this session's running load against what this
+  // product (and, as a fallback, all products) has held before. Exclude the
+  // current entry so it never measures itself.
+  const profile = capacityProfile(logs, entry.productId, entry.id);
+  const gAll = globalCapacity(logs, entry.id);
+  // Fallback compares only against the most any diaper has held dry. A global
+  // leak floor would be dominated by the single weakest product and would cry
+  // wolf on everything, so we deliberately drop it here.
+  const fallback = { dryCeiling: gAll.dryCeiling };
+  const capStatus = capacityStatus(stats.load, profile, fallback);
+  const isOn = entry.takenOffAt == null;
 
   return (
     <Modal
@@ -159,6 +228,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
             {` · ${stats.count} wetting${stats.count !== 1 ? 's' : ''}`}
             {stats.peakFeel && ` · felt ${feelLabel(stats.peakFeel).toLowerCase()}`}
           </div>
+          <CapacityMeter load={stats.load} status={capStatus} isOn={isOn} />
         </div>
 
         {/* Existing wettings */}
@@ -184,6 +254,9 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
                       )}
                       {w.tapes && (
                         <span style={{ color: 'var(--ink-mute)' }}> · tapes {tapeLabel(w.tapes).toLowerCase()}</span>
+                      )}
+                      {w.posture && (
+                        <span style={{ color: 'var(--ink-mute)' }}> · {postureLabel(w.posture).toLowerCase()}</span>
                       )}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 1 }}>
@@ -260,6 +333,22 @@ export default function WettingForm({ open, onClose, entry, product, onSave }) {
                 >
                   <span style={{ flex: 1 }}>{c.label}</span>
                   {core === c.value && <Check size={14} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="label">Body position? (optional)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {POSTURES.map((p) => (
+                <button
+                  key={p.value} type="button"
+                  className={`check-row ${posture === p.value ? 'active' : ''}`}
+                  onClick={() => setPosture(posture === p.value ? '' : p.value)}
+                >
+                  <span style={{ flex: 1 }}>{p.label}</span>
+                  {posture === p.value && <Check size={14} />}
                 </button>
               ))}
             </div>

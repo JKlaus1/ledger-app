@@ -10,7 +10,7 @@ import {
   productDisplayName, totalStock, dayKey, formatDuration,
 } from '../lib/helpers';
 import {
-  WETNESS, getWettings, wettingStats, wetnessLabel,
+  WETNESS, getWettings, wettingStats, wetnessLabel, globalCapacity,
 } from '../lib/wetting';
 import {
   CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
@@ -19,6 +19,17 @@ import {
 export default function Insights({ products, logs, locations, thumbs, daysRemainingMap }) {
   // Filter out moves - they're inventory transfers, not consumption
   const usageLogs = logs.filter((l) => l.type !== 'move');
+
+  // A wear log is the modern put-on/take-off kind, or an older typed/untyped
+  // entry that predates it. We surface how many predate the detailed schema so
+  // sections that need putOnAt (timing, wettings, context) are read against
+  // the right denominator instead of looking artificially sparse.
+  const isWear = (l) => l.type === 'use' || (!l.type && (l.putOnAt || l.period));
+  const legacyInfo = useMemo(() => {
+    const wears = logs.filter(isWear);
+    const detailed = wears.filter((l) => l.putOnAt);
+    return { total: wears.length, detailed: detailed.length, legacy: wears.length - detailed.length };
+  }, [logs]);
 
   // Last 14 days bar chart
   const dailyData = useMemo(() => {
@@ -113,6 +124,10 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       .filter((x) => x.product && (x.leakCount + x.heldCount) >= 1)
       .sort((a, b) => (b.avgLeakLoad ?? b.maxHeld ?? 0) - (a.avgLeakLoad ?? a.maxHeld ?? 0));
   }, [usageLogs, products]);
+
+  // A blunt fallback ceiling across all products, shown so the live capacity
+  // warning's basis is visible here too.
+  const globalCap = useMemo(() => globalCapacity(usageLogs), [usageLogs]);
 
   // Wetting distribution by hour of day (0–23), across every session.
   const wettingByHour = useMemo(() => {
@@ -301,6 +316,23 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
           <div className="eyebrow" style={{ marginTop: 6 }}>Days tracked</div>
         </div>
       </div>
+
+      {legacyInfo.legacy > 0 && (
+        <div className="card" style={{
+          padding: '12px 14px', marginBottom: 28,
+          borderLeft: '3px solid var(--accent)',
+        }}>
+          <div style={{ fontSize: 13 }}>
+            {legacyInfo.legacy} of {legacyInfo.total} logged wears predate detailed tracking
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 4, lineHeight: 1.45 }}>
+            Those early logs have no put-on/take-off time, wettings, or context.
+            Timing, wetting, capacity, booster and context sections below use only
+            the {legacyInfo.detailed} detailed wear{legacyInfo.detailed !== 1 ? 's' : ''};
+            totals, leak rate and cost include all {legacyInfo.total}.
+          </div>
+        </div>
+      )}
 
       {/* Daily chart */}
       <section style={{ marginBottom: 36 }}>
@@ -524,6 +556,18 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
                   </div>
                 ))}
               </div>
+              {(globalCap.dryCeiling != null || globalCap.leakFloor != null) && (
+                <p style={{
+                  fontSize: 11, color: 'var(--ink-mute)',
+                  marginTop: 10, fontStyle: 'italic',
+                }}>
+                  Across all products, the most held dry was a load of{' '}
+                  <span className="num">{globalCap.dryCeiling ?? '—'}</span>
+                  {globalCap.leakFloor != null && (
+                    <>; leaks have started as low as <span className="num">{globalCap.leakFloor}</span></>
+                  )}. A worn diaper nearing these gets a heads-up on its wettings screen.
+                </p>
+              )}
             </>
           )}
         </section>

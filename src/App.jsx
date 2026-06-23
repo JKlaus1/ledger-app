@@ -605,6 +605,7 @@ export default function App() {
         entry={wettingEntry ? (logs.find((l) => l.id === wettingEntry.id) || wettingEntry) : null}
         product={wettingEntry ? products.find((p) => p.id === wettingEntry.productId) : null}
         onSave={handleSaveWettings}
+        logs={logs}
       />
 
       <NoteForm

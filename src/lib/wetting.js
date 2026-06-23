@@ -3,16 +3,19 @@
 // Each wear-session log (a "use" entry with a putOnAt time) may carry an
 // optional `wettings` array, stored inline on the log object:
 //
-//   wettings: [{ id, at, amount, feel, note }]
+//   wettings: [{ id, at, amount, feel, core, tapes, posture, note }]
 //
 // Because it rides along on the existing log records, it needs no new
-// IndexedDB store and is automatically included in backup export/import
-// and the GitHub-synced... (nothing — data stays on device). Older logs
-// without the field are treated as having no wettings.
+// IndexedDB store and is automatically included in backup export/import.
+// Older logs without a field are treated as not set.
 //
-//   amount — how heavy the wetting was (light → very heavy)
-//   feel   — how the diaper felt afterwards (a saturation scale)
-//   core   — optional in-the-moment read on the padding itself (intact → breaking down)
+//   amount  — how heavy the wetting was (light → very heavy)
+//   feel    — how the diaper felt afterwards (a saturation scale)
+//   core    — optional in-the-moment read on the padding itself
+//   tapes   — optional tape behaviour at that moment
+//   posture — optional body position when it happened (sitting → active);
+//             notes repeatedly show standing/active floods stress capacity
+//             differently than resting, so it's worth capturing structurally.
 
 export const WETNESS = [
   { value: 'light',    label: 'Light',      weight: 1, order: 1 },
@@ -40,13 +43,25 @@ export const CORE_FEEL = [
   { value: 'shifting',  label: 'Shifting / bunching', order: 4 },
 ];
 
+// Body position at the moment of the wetting. Optional and backward
+// compatible. Ordered roughly rest → active; this is a position label, not a
+// severity scale, so consumers should not assume higher order = worse.
+export const POSTURES = [
+  { value: 'lying',    label: 'Lying down',          order: 1 },
+  { value: 'sitting',  label: 'Sitting',             order: 2 },
+  { value: 'standing', label: 'Standing',            order: 3 },
+  { value: 'active',   label: 'Walking / active',    order: 4 },
+];
+
 export const wetnessMeta = (v) => WETNESS.find((w) => w.value === v) || null;
 export const feelMeta = (v) => DIAPER_FEEL.find((f) => f.value === v) || null;
 export const coreFeelMeta = (v) => CORE_FEEL.find((c) => c.value === v) || null;
+export const postureMeta = (v) => POSTURES.find((p) => p.value === v) || null;
 
 export const wetnessLabel = (v) => wetnessMeta(v)?.label || '—';
 export const feelLabel = (v) => feelMeta(v)?.label || '—';
 export const coreFeelLabel = (v) => coreFeelMeta(v)?.label || '—';
+export const postureLabel = (v) => postureMeta(v)?.label || '—';
 
 // Always returns a time-sorted array, tolerant of older logs with no field.
 export const getWettings = (log) => {
@@ -74,4 +89,86 @@ export const wettingStats = (log) => {
   });
   const lastFeel = list.length ? list[list.length - 1].feel : null;
   return { count: list.length, load, lastFeel, peakFeel, byAmount, list };
+};
+
+// ---- Capacity profiling --------------------------------------------------
+// Learn, per product, how much "load" (summed wetting weight) it has held
+// before vs. without leaking, so the app can warn as a worn diaper nears the
+// point it has historically given out. Pure functions of the logs array.
+//
+//   dryCeiling — most load held on a session that did NOT leak
+//   leakFloor  — least load on a session that DID leak (the soonest it failed)
+//   dryN/leakN — how many sessions back each number (so callers can judge n)
+
+const sessionLoad = (log) => wettingStats(log).load;
+
+export const capacityProfile = (logs, productId, excludeLogId = null) => {
+  const sessions = (logs || []).filter(
+    (l) => l.productId === productId && l.putOnAt &&
+           l.id !== excludeLogId && getWettings(l).length > 0
+  );
+  let dryCeiling = null;
+  let leakFloor = null;
+  let dryN = 0;
+  let leakN = 0;
+  sessions.forEach((l) => {
+    const load = sessionLoad(l);
+    if (l.performance === 'leak') {
+      leakN += 1;
+      if (leakFloor == null || load < leakFloor) leakFloor = load;
+    } else {
+      dryN += 1;
+      if (dryCeiling == null || load > dryCeiling) dryCeiling = load;
+    }
+  });
+  return { dryCeiling, leakFloor, dryN, leakN, sampleN: sessions.length };
+};
+
+// A fallback profile across every product, for when a single product has too
+// little history to say anything on its own.
+export const globalCapacity = (logs, excludeLogId = null) => {
+  const sessions = (logs || []).filter(
+    (l) => l.putOnAt && l.id !== excludeLogId && getWettings(l).length > 0
+  );
+  let dryCeiling = null;
+  let leakFloor = null;
+  let dryN = 0;
+  let leakN = 0;
+  sessions.forEach((l) => {
+    const load = sessionLoad(l);
+    if (l.performance === 'leak') {
+      leakN += 1;
+      if (leakFloor == null || load < leakFloor) leakFloor = load;
+    } else {
+      dryN += 1;
+      if (dryCeiling == null || load > dryCeiling) dryCeiling = load;
+    }
+  });
+  return { dryCeiling, leakFloor, dryN, leakN, sampleN: sessions.length };
+};
+
+// Given a running load and a capacity profile (plus optional fallback),
+// classify how close the diaper is to its historical limit.
+//   level — 'none' (no basis) | 'ok' | 'watch' | 'over'
+//   basis — 'leak' (vs the load it has leaked at) | 'dry' (vs most held dry)
+//   ceiling — the number `load` is being compared against
+//   fromProduct — true if the basis came from this product, not the fallback
+export const capacityStatus = (load, profile, fallback = null) => {
+  if (!load || load <= 0) return { level: 'none' };
+  const usable = (o) => (o && (o.leakFloor != null || o.dryCeiling != null)) ? o : null;
+  const src = usable(profile) || usable(fallback);
+  if (!src) return { level: 'none' };
+  const leakBasis = src.leakFloor != null;
+  const ceiling = leakBasis ? src.leakFloor : src.dryCeiling;
+  if (ceiling == null || ceiling <= 0) return { level: 'none' };
+  const ratio = load / ceiling;
+  let level = 'ok';
+  if (leakBasis) {
+    if (load >= ceiling) level = 'over';
+    else if (ratio >= 0.75) level = 'watch';
+  } else {
+    if (load > ceiling) level = 'over';
+    else if (ratio >= 0.85) level = 'watch';
+  }
+  return { level, basis: leakBasis ? 'leak' : 'dry', ceiling, ratio, fromProduct: src === profile };
 };
