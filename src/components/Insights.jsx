@@ -15,7 +15,7 @@ import {
 } from '../lib/wetting';
 import {
   CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
-  LEAK_ESCAPE, LEAK_SEVERITY, isWearLog,
+  LEAK_ESCAPE, LEAK_SEVERITY, isWearLog, WICKING, wickingLabel,
 } from '../lib/session';
 import { isDrink, DRINK_KINDS, drinkKindLabel, drinkVolumeOz } from '../lib/intake';
 
@@ -211,6 +211,33 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       severityRows: LEAK_SEVERITY.map((x) => ({ ...x, count: severity[x.value] || 0 })).filter((r) => r.count > 0),
     };
   }, [usageLogs]);
+
+  // Padding use — how far wettings wicked through the pad, overall and by
+  // product, so "which diapers actually use their padding" becomes visible.
+  const wickingAgg = useMemo(() => {
+    const orderOf = {}; WICKING.forEach((w) => { orderOf[w.value] = w.order; });
+    const rated = usageLogs.filter((l) => l.putOnAt && l.wicking);
+    const overall = {}; WICKING.forEach((w) => { overall[w.value] = 0; });
+    rated.forEach((l) => { overall[l.wicking] += 1; });
+    const byProduct = {};
+    rated.forEach((l) => {
+      const b = (byProduct[l.productId] ||= { n: 0, sum: 0, frontOnly: 0 });
+      b.n += 1;
+      b.sum += orderOf[l.wicking] || 0;
+      if (l.wicking === 'front') b.frontOnly += 1;
+    });
+    const productRows = Object.entries(byProduct).map(([pid, b]) => {
+      const p = products.find((x) => x.id === pid);
+      return {
+        id: pid,
+        name: p ? productDisplayName(p) : 'Unknown',
+        n: b.n,
+        avg: b.sum / b.n,
+        frontOnly: b.frontOnly,
+      };
+    }).sort((a, b) => b.avg - a.avg);
+    return { count: rated.length, overall, productRows };
+  }, [usageLogs, products]);
 
   // Usage + leak rate broken down by the context it was worn in.
   const contextStats = useMemo(() => {
@@ -730,6 +757,63 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {/* Padding use (wicking) */}
+      {wickingAgg.count > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Padding use" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            How far wettings wicked through the pad at take-off, across {wickingAgg.count} rated wear{wickingAgg.count !== 1 ? 's' : ''}. A diaper that mostly swells in front is using less of its real capacity.
+          </p>
+          <div className="card" style={{ padding: 4, marginBottom: wickingAgg.productRows.length > 1 ? 20 : 0 }}>
+            {WICKING.map((w) => {
+              const count = wickingAgg.overall[w.value] || 0;
+              const pct = wickingAgg.count ? (count / wickingAgg.count) * 100 : 0;
+              return (
+                <div key={w.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{w.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{count}</span>
+                    <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 4 }}>
+                      {Math.round(pct)}%
+                    </span>
+                  </div>
+                  <div style={{ height: 3, background: 'var(--line-soft)', borderRadius: 2, marginTop: 8 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: w.value === 'front' ? 'var(--danger)' : 'var(--accent)', borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {wickingAgg.productRows.length > 1 && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--ink-soft)', margin: '0 0 8px' }}>
+                Which use more of the pad (higher = wicks further, out of 4):
+              </p>
+              <div className="card" style={{ padding: 4 }}>
+                {wickingAgg.productRows.map((r) => (
+                  <div key={r.id} className="row-divider" style={{ padding: '12px 14px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14, minWidth: 0 }}>{r.name}</span>
+                    {r.frontOnly > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--danger)' }}>
+                        {r.frontOnly} front-only
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>n={r.n}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{r.avg.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 10, fontStyle: 'italic' }}>
+            Distribution also depends on position when wetting — posture is logged per wetting, so patterns there can explain front-only sessions.
+          </p>
         </section>
       )}
 

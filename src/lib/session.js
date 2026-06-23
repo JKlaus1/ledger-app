@@ -109,6 +109,17 @@ export const CLEANUP_METHODS = [
 
 const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 
+// How far a wetting wicked through the padding by take-off — i.e. how much of
+// the pad actually got used. Ordered by utilisation (front only → whole pad).
+// A diaper that only swells in front has effectively used far less of its
+// capacity than one that wicks evenly front-to-back.
+export const WICKING = [
+  { value: 'front', label: 'Front only', order: 1 },
+  { value: 'crotch', label: 'Front & between legs', order: 2 },
+  { value: 'rear', label: 'Reached the rear', order: 3 },
+  { value: 'even', label: 'Used evenly throughout', order: 4 },
+];
+
 export const contextLabel = (v) => labelOf(CONTEXTS, v);
 export const reasonLabel = (v) => labelOf(CHANGE_REASONS, v);
 export const skinLabel = (v) => labelOf(SKIN_STATES, v);
@@ -120,6 +131,7 @@ export const tapeLabel = (v) => labelOf(TAPE_STATES, v);
 export const leakEscapeLabel = (v) => labelOf(LEAK_ESCAPE, v);
 export const leakSeverityLabel = (v) => labelOf(LEAK_SEVERITY, v);
 export const cleanupLabel = (v) => labelOf(CLEANUP_METHODS, v);
+export const wickingLabel = (v) => labelOf(WICKING, v);
 
 // A wear/use log: a diaper actually put on (stock decrements at put-on). The
 // modern kind has type 'use'; older entries predate the type field but carry a

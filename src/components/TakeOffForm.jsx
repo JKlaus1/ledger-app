@@ -7,7 +7,7 @@ import {
 } from '../lib/helpers';
 import {
   CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS, TAPE_STATES,
-  LEAK_ESCAPE, LEAK_SEVERITY, CLEANUP_METHODS,
+  LEAK_ESCAPE, LEAK_SEVERITY, CLEANUP_METHODS, WICKING,
 } from '../lib/session';
 
 // TakeOffForm — ends the active wear session. Records take-off time, how it
@@ -21,6 +21,7 @@ export default function TakeOffForm({
   const [performance, setPerformance] = useState('used');
   const [activity, setActivity] = useState('');
   const [core, setCore] = useState('');
+  const [wicking, setWicking] = useState('');
   const [tapes, setTapes] = useState('');
   const [changeReason, setChangeReason] = useState('');
   const [skin, setSkin] = useState('');
@@ -38,6 +39,7 @@ export default function TakeOffForm({
       setPerformance('used');
       setActivity('');
       setCore('');
+      setWicking('');
       setTapes('');
       setChangeReason('');
       setSkin('');
@@ -72,6 +74,7 @@ export default function TakeOffForm({
         performance,
         activity: activity || null,
         core: core || null,
+        wicking: wicking || null,
         tapes: tapes || null,
         changeReason: changeReason || null,
         skin: skin || null,
@@ -197,6 +200,22 @@ export default function TakeOffForm({
               >
                 <span style={{ flex: 1 }}>{c.label}</span>
                 {core === c.value && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="label">How well did it wick through the padding? (optional)</label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {WICKING.map((w) => (
+              <button
+                key={w.value} type="button"
+                className={`check-row ${wicking === w.value ? 'active' : ''}`}
+                onClick={() => setWicking(wicking === w.value ? '' : w.value)}
+              >
+                <span style={{ flex: 1 }}>{w.label}</span>
+                {wicking === w.value && <Check size={14} />}
               </button>
             ))}
           </div>
