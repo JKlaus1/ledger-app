@@ -4,16 +4,23 @@ import { Modal } from './Common';
 import {
   uid, toLocalInputValue, fromLocalInputValue, productDisplayName,
 } from '../lib/helpers';
+import { CONTEXTS } from '../lib/session';
 
 // A note is its own kind of log (type: 'note'): a free-standing, timestamped
 // entry. When opened from the diaper on now it carries that wear's product /
-// location / session so it reads as "a note about this wear"; opened on its
-// own it's a general context note with an editable time (so it can be backdated).
+// session so it reads as "a note about this wear"; opened on its own it's a
+// general note with an editable time (so it can be backdated).
+//
+// "Where I am" (context + free-text place) is distinct from the storage spot:
+// the former is where you physically were, the latter is which stash a note
+// might reference. They used to share one field, which conflated the two.
 export default function NoteForm({
   open, onClose, onSave, locations, products, initial, context,
 }) {
   const [text, setText] = useState('');
   const [at, setAt] = useState('');
+  const [whereContext, setWhereContext] = useState('');
+  const [place, setPlace] = useState('');
   const [locationId, setLocationId] = useState('');
 
   useEffect(() => {
@@ -21,10 +28,14 @@ export default function NoteForm({
     if (initial) {
       setText(initial.text || '');
       setAt(toLocalInputValue(initial.timestamp || Date.now()));
+      setWhereContext(initial.context || '');
+      setPlace(initial.place || '');
       setLocationId(initial.locationId || '');
     } else {
       setText('');
       setAt(toLocalInputValue(Date.now()));
+      setWhereContext(context?.context || '');
+      setPlace('');
       setLocationId(context?.locationId || '');
     }
   }, [open, initial, context]);
@@ -44,6 +55,8 @@ export default function NoteForm({
       text: text.trim(),
       timestamp: ts,
       productId: aboutProductId || null,
+      context: whereContext || null,
+      place: place.trim() || null,
       locationId: locationId || null,
       sessionId: sessionId || null,
       createdAt: initial?.createdAt || Date.now(),
@@ -101,9 +114,30 @@ export default function NoteForm({
           />
         </div>
 
+        <div>
+          <label className="label">Where were you? (optional)</label>
+          <select
+            className="select"
+            value={whereContext}
+            onChange={(e) => setWhereContext(e.target.value)}
+          >
+            <option value="">Not set</option>
+            {CONTEXTS.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <input
+            className="input"
+            style={{ marginTop: 8 }}
+            placeholder="Place (optional) — e.g. wedding venue, Harwood"
+            value={place}
+            onChange={(e) => setPlace(e.target.value)}
+          />
+        </div>
+
         {sortedLocations.length > 0 && (
           <div>
-            <label className="label">Location (optional)</label>
+            <label className="label">Storage spot it's about (optional)</label>
             <select
               className="select"
               value={locationId}

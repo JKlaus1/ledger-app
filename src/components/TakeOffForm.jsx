@@ -5,11 +5,15 @@ import {
   PERFORMANCE, toLocalInputValue, fromLocalInputValue,
   productDisplayName, formatDuration,
 } from '../lib/helpers';
-import { CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS, TAPE_STATES } from '../lib/session';
+import {
+  CHANGE_REASONS, SKIN_STATES, ACTIVITY_LEVELS, CORE_CONDITIONS, TAPE_STATES,
+  LEAK_ESCAPE, LEAK_SEVERITY, CLEANUP_METHODS,
+} from '../lib/session';
 
-// TakeOffForm — ends the active wear session. Records take-off time,
-// how it performed, and optional notes. A "then" choice lets the user
-// either go without or immediately put a fresh one on (change-out).
+// TakeOffForm — ends the active wear session. Records take-off time, how it
+// performed, optional take-off detail, and (when it leaked) where/how badly it
+// leaked, plus the cleanup/skin routine. A "then" choice lets the user go
+// without or immediately put a fresh one on (change-out).
 export default function TakeOffForm({
   open, onClose, onConfirm, entry, product, defaultThen,
 }) {
@@ -21,6 +25,10 @@ export default function TakeOffForm({
   const [changeReason, setChangeReason] = useState('');
   const [skin, setSkin] = useState('');
   const [cream, setCream] = useState(false);
+  const [creamProduct, setCreamProduct] = useState('');
+  const [leakEscape, setLeakEscape] = useState('');
+  const [leakSeverity, setLeakSeverity] = useState('');
+  const [cleanup, setCleanup] = useState([]);
   const [notes, setNotes] = useState('');
   const [then, setThen] = useState('none'); // 'none' | 'replace'
 
@@ -34,6 +42,10 @@ export default function TakeOffForm({
       setChangeReason('');
       setSkin('');
       setCream(false);
+      setCreamProduct('');
+      setLeakEscape('');
+      setLeakSeverity('');
+      setCleanup([]);
       setNotes('');
       setThen(defaultThen === 'replace' ? 'replace' : 'none');
     }
@@ -42,9 +54,12 @@ export default function TakeOffForm({
   if (!open || !entry) return null;
 
   const putOnAt = entry.putOnAt;
-  // Guard: take-off can't be before put-on
   const effectiveOff = Math.max(takenOffAt, putOnAt);
   const duration = effectiveOff - putOnAt;
+  const isLeak = performance === 'leak';
+
+  const toggleCleanup = (v) =>
+    setCleanup((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
 
   const submit = () => {
     const merged = entry.notes
@@ -61,6 +76,10 @@ export default function TakeOffForm({
         changeReason: changeReason || null,
         skin: skin || null,
         cream: !!cream,
+        creamProduct: cream ? (creamProduct.trim() || null) : null,
+        leakEscape: isLeak ? (leakEscape || null) : null,
+        leakSeverity: isLeak ? (leakSeverity || null) : null,
+        cleanup: cleanup.length ? cleanup : null,
         notes: merged,
       },
       then === 'replace'
@@ -115,6 +134,41 @@ export default function TakeOffForm({
             ))}
           </div>
         </div>
+
+        {isLeak && (
+          <>
+            <div>
+              <label className="label">Where did it leak?</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {LEAK_ESCAPE.map((e) => (
+                  <button
+                    key={e.value} type="button"
+                    className={`check-row ${leakEscape === e.value ? 'active' : ''}`}
+                    onClick={() => setLeakEscape(leakEscape === e.value ? '' : e.value)}
+                  >
+                    <span style={{ flex: 1 }}>{e.label}</span>
+                    {leakEscape === e.value && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="label">How bad?</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {LEAK_SEVERITY.map((s) => (
+                  <button
+                    key={s.value} type="button"
+                    className={`check-row ${leakSeverity === s.value ? 'active' : ''}`}
+                    onClick={() => setLeakSeverity(leakSeverity === s.value ? '' : s.value)}
+                  >
+                    <span style={{ flex: 1 }}>{s.label}</span>
+                    {leakSeverity === s.value && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         <div>
           <label className="label">How active were you? (optional)</label>
@@ -195,6 +249,22 @@ export default function TakeOffForm({
         </div>
 
         <div>
+          <label className="label">Cleanup (optional)</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {CLEANUP_METHODS.map((m) => (
+              <button
+                key={m.value} type="button"
+                className={`check-row ${cleanup.includes(m.value) ? 'active' : ''}`}
+                onClick={() => toggleCleanup(m.value)}
+              >
+                <span style={{ flex: 1 }}>{m.label}</span>
+                {cleanup.includes(m.value) && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <label className="label">Barrier cream applied?</label>
           <button
             type="button"
@@ -204,6 +274,15 @@ export default function TakeOffForm({
             <span style={{ flex: 1 }}>{cream ? 'Yes — applied' : 'No'}</span>
             {cream && <Check size={14} />}
           </button>
+          {cream && (
+            <input
+              className="input"
+              style={{ marginTop: 8 }}
+              placeholder="Which cream? (optional) — e.g. Desitin Max"
+              value={creamProduct}
+              onChange={(e) => setCreamProduct(e.target.value)}
+            />
+          )}
         </div>
 
         <div>

@@ -78,6 +78,35 @@ export const TAPE_STATES = [
   { value: 'failed',   label: 'Tab failed (tore / lost stick)', order: 4 },
 ];
 
+// ---- Take-off leak & cleanup detail -------------------------------------
+// Recorded at take-off. Leak fields only matter when performance is 'leak';
+// cleanup fields apply to any change. All optional and backward compatible.
+
+// Where the leak escaped from. Notes repeatedly cite the leg holes and back.
+export const LEAK_ESCAPE = [
+  { value: 'legs',     label: 'Leg holes' },
+  { value: 'back',     label: 'Out the back' },
+  { value: 'front',    label: 'Front / waistband' },
+  { value: 'multiple', label: 'More than one spot' },
+];
+
+// How bad the leak was, worst-ascending.
+export const LEAK_SEVERITY = [
+  { value: 'spot',    label: 'A spot or two',        order: 1 },
+  { value: 'clothes', label: 'Wet through clothes',  order: 2 },
+  { value: 'soaked',  label: 'Soaked clothes',       order: 3 },
+  { value: 'surface', label: 'Reached a surface',    order: 4 },
+];
+
+// What was done to clean up / protect skin at the change. Multi-select.
+export const CLEANUP_METHODS = [
+  { value: 'wipes',  label: 'Wipes' },
+  { value: 'rinse',  label: 'Rinse' },
+  { value: 'shower', label: 'Shower' },
+  { value: 'powder', label: 'Powder' },
+  { value: 'airdry', label: 'Air-dried' },
+];
+
 const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 
 export const contextLabel = (v) => labelOf(CONTEXTS, v);
@@ -88,6 +117,9 @@ export const tabsLabel = (v) => labelOf(TAB_TYPES, v);
 export const activityLabel = (v) => labelOf(ACTIVITY_LEVELS, v);
 export const coreLabel = (v) => labelOf(CORE_CONDITIONS, v);
 export const tapeLabel = (v) => labelOf(TAPE_STATES, v);
+export const leakEscapeLabel = (v) => labelOf(LEAK_ESCAPE, v);
+export const leakSeverityLabel = (v) => labelOf(LEAK_SEVERITY, v);
+export const cleanupLabel = (v) => labelOf(CLEANUP_METHODS, v);
 
 // A put-on within this many ms after a take-off is treated as a direct
 // change-out (not a fresh wear with a gap). Used both by explicit "change into"

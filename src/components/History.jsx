@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
-import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote, Repeat } from 'lucide-react';
+import { Pencil, Trash2, Sun, Moon, ClipboardList, ArrowRight, Droplets, StickyNote, Repeat, GlassWater } from 'lucide-react';
 import { ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import { WettingSummary } from './WettingForm';
 import { contextLabel, reasonLabel } from '../lib/session';
+import { isDrink, drinkKindLabel, drinkSizeLabel } from '../lib/intake';
 import {
   formatDate, formatTime, dayKey, productDisplayName,
   formatDuration, wearDuration,
@@ -29,13 +30,14 @@ export default function History({
   const filtered = useMemo(() => {
     return logs
       .filter((l) => {
-        if (typeFilter === 'use') return l.type !== 'move' && l.type !== 'note';
+        if (typeFilter === 'use') return l.type !== 'move' && l.type !== 'note' && l.type !== 'drink';
         if (typeFilter === 'move') return l.type === 'move';
         if (typeFilter === 'note') return l.type === 'note';
+        if (typeFilter === 'drink') return l.type === 'drink';
         return true;
       })
       .filter((l) => {
-        if (l.type === 'move' || l.type === 'note') return periodFilter === 'all';
+        if (l.type === 'move' || l.type === 'note' || l.type === 'drink') return periodFilter === 'all';
         return periodFilter === 'all' || l.period === periodFilter;
       })
       .filter((l) => productFilter === 'all' || l.productId === productFilter)
@@ -105,8 +107,14 @@ export default function History({
           >
             Notes
           </button>
+          <button
+            className={`seg-btn ${typeFilter === 'drink' ? 'active' : ''}`}
+            onClick={() => setTypeFilter('drink')}
+          >
+            Drinks
+          </button>
         </div>
-        {typeFilter !== 'move' && typeFilter !== 'note' && (
+        {typeFilter !== 'move' && typeFilter !== 'note' && typeFilter !== 'drink' && (
           <div className="seg">
             <button
               className={`seg-btn ${periodFilter === 'all' ? 'active' : ''}`}
@@ -185,6 +193,46 @@ export default function History({
 
                 <div className="card" style={{ padding: 4 }}>
                   {entries.map((l) => {
+                    if (isDrink(l)) {
+                      return (
+                        <div
+                          key={l.id}
+                          className="row-divider"
+                          style={{
+                            padding: '12px 14px',
+                            display: 'flex', alignItems: 'flex-start', gap: 12,
+                          }}
+                        >
+                          <div style={{
+                            width: 56, fontSize: 13, color: 'var(--ink-soft)',
+                            paddingTop: 1, fontVariantNumeric: 'tabular-nums',
+                          }}>
+                            {formatTime(l.timestamp)}
+                          </div>
+                          <div style={{ marginTop: 2, color: 'var(--primary)', flexShrink: 0 }}>
+                            <GlassWater size={16} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14 }}>
+                              {drinkKindLabel(l.kind)}
+                              {l.size && <span style={{ color: 'var(--ink-mute)' }}> · {drinkSizeLabel(l.size).toLowerCase()}</span>}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 4 }}>
+                              <span style={{ color: 'var(--primary)' }}>Drink</span>
+                              {l.note && <span> · {l.note}</span>}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            <button className="btn-icon" onClick={() => onEdit(l)} aria-label="Edit drink">
+                              <Pencil size={14} />
+                            </button>
+                            <button className="btn-icon" onClick={() => onDelete(l)} aria-label="Delete drink">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
                     if (l.type === 'note') {
                       const np = l.productId ? products.find((x) => x.id === l.productId) : null;
                       const nloc = l.locationId ? locations.find((x) => x.id === l.locationId) : null;
@@ -214,6 +262,8 @@ export default function History({
                               flexWrap: 'wrap',
                             }}>
                               <span style={{ color: 'var(--accent)' }}>Note</span>
+                              {l.context && <><span>·</span><span>{contextLabel(l.context) || l.context}</span></>}
+                              {l.place && <><span>·</span><span>{l.place}</span></>}
                               {np && <><span>·</span><span>{productDisplayName(np)}</span></>}
                               {nloc && <><span>·</span><LocationIcon name={nloc.icon} size={11} /><span>{nloc.name}</span></>}
                             </div>

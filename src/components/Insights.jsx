@@ -11,10 +11,13 @@ import {
 } from '../lib/helpers';
 import {
   WETNESS, getWettings, wettingStats, wetnessLabel, globalCapacity,
+  eventKind, CONTROL_LEVELS, controlLabel,
 } from '../lib/wetting';
 import {
   CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
+  LEAK_ESCAPE, LEAK_SEVERITY,
 } from '../lib/session';
+import { isDrink, DRINK_KINDS, drinkKindLabel, drinkSizeOz } from '../lib/intake';
 
 export default function Insights({ products, logs, locations, thumbs, daysRemainingMap }) {
   // Filter out moves - they're inventory transfers, not consumption
@@ -79,23 +82,23 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
   // per product, how much load it held before leaking vs. while staying dry.
   const wettingAgg = useMemo(() => {
     const sessions = usageLogs.filter((l) => l.putOnAt);
-    const withWet = sessions.filter((l) => getWettings(l).length > 0);
     const amountCounts = {};
     WETNESS.forEach((w) => { amountCounts[w.value] = 0; });
     let totalWettings = 0;
+    let wetSessionCount = 0;
     sessions.forEach((l) => {
-      getWettings(l).forEach((w) => {
-        totalWettings += 1;
-        if (amountCounts[w.amount] != null) amountCounts[w.amount] += 1;
-      });
+      const st = wettingStats(l); // wet-only counts; BM/toilet excluded
+      if (st.count > 0) wetSessionCount += 1;
+      totalWettings += st.count;
+      WETNESS.forEach((w) => { amountCounts[w.value] += st.byAmount[w.value] || 0; });
     });
     return {
       sessionCount: sessions.length,
-      wetSessionCount: withWet.length,
+      wetSessionCount,
       totalWettings,
       amountCounts,
       avgPerDiaper: sessions.length ? totalWettings / sessions.length : 0,
-      avgPerWetDiaper: withWet.length ? totalWettings / withWet.length : 0,
+      avgPerWetDiaper: wetSessionCount ? totalWettings / wetSessionCount : 0,
     };
   }, [usageLogs]);
 
@@ -134,6 +137,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: 0 }));
     usageLogs.filter((l) => l.putOnAt).forEach((l) => {
       getWettings(l).forEach((w) => {
+        if (eventKind(w) !== 'wet') return;
         const h = new Date(w.at).getHours();
         if (h >= 0 && h < 24) hours[h].count += 1;
       });
@@ -156,6 +160,50 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
       };
     };
     return { withB: grp(true), withoutB: grp(false) };
+  }, [usageLogs]);
+
+  // Toilet uses, BM-in-diaper, and the voluntary/accident breakdown across
+  // every event. This is the continence-pattern signal.
+  const eliminationAgg = useMemo(() => {
+    const sessions = usageLogs.filter((l) => l.putOnAt);
+    let toilet = 0, bm = 0;
+    let toiletPee = 0, toiletBM = 0, toiletBoth = 0;
+    const control = { voluntary: 0, couldnt_hold: 0, accident: 0 };
+    sessions.forEach((l) => {
+      getWettings(l).forEach((w) => {
+        const k = eventKind(w);
+        if (k === 'toilet') {
+          toilet += 1;
+          if (w.toiletWhat === 'pee') toiletPee += 1;
+          else if (w.toiletWhat === 'bm') toiletBM += 1;
+          else if (w.toiletWhat === 'both') toiletBoth += 1;
+        } else if (k === 'bm') {
+          bm += 1;
+        }
+        if ((k === 'wet' || k === 'bm') && w.control && control[w.control] != null) {
+          control[w.control] += 1;
+        }
+      });
+    });
+    const controlTotal = control.voluntary + control.couldnt_hold + control.accident;
+    return { toilet, bm, control, controlTotal, toiletPee, toiletBM, toiletBoth,
+      any: toilet > 0 || bm > 0 || controlTotal > 0 };
+  }, [usageLogs]);
+
+  // Leak detail — where leaks escaped and how bad, among sessions marked leak.
+  const leakDetailAgg = useMemo(() => {
+    const leaks = usageLogs.filter((l) => l.putOnAt && l.performance === 'leak');
+    const escape = {}; const severity = {};
+    leaks.forEach((l) => {
+      if (l.leakEscape) escape[l.leakEscape] = (escape[l.leakEscape] || 0) + 1;
+      if (l.leakSeverity) severity[l.leakSeverity] = (severity[l.leakSeverity] || 0) + 1;
+    });
+    return {
+      leakCount: leaks.length,
+      detailed: leaks.filter((l) => l.leakEscape || l.leakSeverity).length,
+      escapeRows: LEAK_ESCAPE.map((e) => ({ ...e, count: escape[e.value] || 0 })).filter((r) => r.count > 0),
+      severityRows: LEAK_SEVERITY.map((x) => ({ ...x, count: severity[x.value] || 0 })).filter((r) => r.count > 0),
+    };
   }, [usageLogs]);
 
   // Usage + leak rate broken down by the context it was worn in.
@@ -266,6 +314,20 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     const costPerDay = trackingDays > 0 ? totalSpent / trackingDays : 0;
     return { rows, totalSpent, costPerDay, monthly: costPerDay * 30 };
   }, [products, usageLogs, trackingDays]);
+
+  // Fluid intake — drinks logged, by kind, and a rough daily volume.
+  const intakeAgg = useMemo(() => {
+    const drinks = logs.filter(isDrink);
+    const byKind = {}; let totalOz = 0;
+    drinks.forEach((d) => { byKind[d.kind] = (byKind[d.kind] || 0) + 1; totalOz += drinkSizeOz(d.size); });
+    return {
+      count: drinks.length,
+      totalOz,
+      perDay: trackingDays > 0 ? drinks.length / trackingDays : 0,
+      ozPerDay: trackingDays > 0 ? totalOz / trackingDays : 0,
+      kindRows: DRINK_KINDS.map((k) => ({ ...k, count: byKind[k.value] || 0 })).filter((r) => r.count > 0),
+    };
+  }, [logs, trackingDays]);
 
   // Format an hour (0–23) as a compact 12-hour label, e.g. 3a, 12p, 9p.
   const fmtHour = (h) => {
@@ -570,6 +632,139 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
               )}
             </>
           )}
+        </section>
+      )}
+
+      {/* Toilet & accidents */}
+      {eliminationAgg.any && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Toilet & accidents" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Toilet uses (diaper off, so excluded from capacity), BMs in the diaper,
+            and how voluntary your wettings were.
+          </p>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 16, marginBottom: eliminationAgg.controlTotal > 0 ? 20 : 0,
+          }}>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>{eliminationAgg.toilet}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Toilet uses</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>{eliminationAgg.bm}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>BMs in diaper</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 28, lineHeight: 1 }}>{eliminationAgg.control.accident}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Accidents</div>
+            </div>
+          </div>
+          {eliminationAgg.controlTotal > 0 && (
+            <div className="card" style={{ padding: 4 }}>
+              {CONTROL_LEVELS.map((c) => {
+                const count = eliminationAgg.control[c.value] || 0;
+                const pct = eliminationAgg.controlTotal ? (count / eliminationAgg.controlTotal) * 100 : 0;
+                return (
+                  <div key={c.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ flex: 1, fontSize: 14 }}>{c.label}</span>
+                      <span className="num" style={{ fontSize: 16 }}>{count}</span>
+                      <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 4 }}>
+                        {Math.round(pct)}%
+                      </span>
+                    </div>
+                    <div style={{ height: 3, background: 'var(--line-soft)', borderRadius: 2, marginTop: 8 }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Leak detail */}
+      {leakDetailAgg.leakCount > 0 && (leakDetailAgg.escapeRows.length > 0 || leakDetailAgg.severityRows.length > 0) && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Leak detail" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Where leaks escaped and how bad, on {leakDetailAgg.detailed} of {leakDetailAgg.leakCount} leak{leakDetailAgg.leakCount !== 1 ? 's' : ''} with detail recorded.
+          </p>
+          {leakDetailAgg.escapeRows.length > 0 && (
+            <div className="card" style={{ padding: 4, marginBottom: leakDetailAgg.severityRows.length ? 16 : 0 }}>
+              {leakDetailAgg.escapeRows.map((e) => (
+                <div key={e.value} className="row-divider" style={{ padding: '12px 14px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 14 }}>{e.label}</span>
+                  <span className="num" style={{ fontSize: 16, color: 'var(--danger)' }}>{e.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {leakDetailAgg.severityRows.length > 0 && (
+            <div className="card" style={{ padding: 4 }}>
+              {leakDetailAgg.severityRows.map((x) => (
+                <div key={x.value} className="row-divider" style={{ padding: '12px 14px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 14 }}>{x.label}</span>
+                  <span className="num" style={{ fontSize: 16 }}>{x.count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Fluid intake */}
+      {intakeAgg.count > 0 && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Fluid intake" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            Drinks you've logged. As this builds up it can be lined up against wetting timing and volume.
+          </p>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 16, marginBottom: 20,
+          }}>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{intakeAgg.count}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Drinks</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{intakeAgg.perDay.toFixed(1)}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Per day</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 24, lineHeight: 1 }}>{Math.round(intakeAgg.ozPerDay)}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>oz / day (est.)</div>
+            </div>
+          </div>
+          <div className="card" style={{ padding: 4 }}>
+            {intakeAgg.kindRows.map((k) => {
+              const max = intakeAgg.kindRows[0].count;
+              const pct = max ? (k.count / max) * 100 : 0;
+              return (
+                <div key={k.value} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{k.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{k.count}</span>
+                  </div>
+                  <div style={{ height: 3, background: 'var(--line-soft)', borderRadius: 2, marginTop: 8 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary)', borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

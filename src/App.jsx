@@ -21,6 +21,7 @@ import Settings from './components/Settings';
 import PhotoViewer from './components/PhotoViewer';
 import WettingForm from './components/WettingForm';
 import NoteForm from './components/NoteForm';
+import DrinkForm from './components/DrinkForm';
 import { CHANGE_OUT_WINDOW_MS } from './lib/session';
 
 import {
@@ -70,6 +71,9 @@ export default function App() {
   const [noteFormOpen, setNoteFormOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [noteContext, setNoteContext] = useState(null);
+
+  const [drinkFormOpen, setDrinkFormOpen] = useState(false);
+  const [editingDrink, setEditingDrink] = useState(null);
 
   const [moveFormOpen, setMoveFormOpen] = useState(false);
   const [moveProductId, setMoveProductId] = useState(null);
@@ -379,6 +383,21 @@ export default function App() {
     setNoteFormOpen(true);
   };
 
+  // Drink logs (type: 'drink') — free-standing fluid intake.
+  const handleSaveDrink = async (drink) => {
+    const exists = logs.find((l) => l.id === drink.id);
+    await saveLog(drink);
+    setLogs(exists ? logs.map((l) => (l.id === drink.id ? drink : l)) : [...logs, drink]);
+    setDrinkFormOpen(false);
+    setEditingDrink(null);
+    setToastMsg(exists ? 'Drink updated' : 'Drink logged');
+  };
+
+  const openDrinkForm = () => {
+    setEditingDrink(null);
+    setDrinkFormOpen(true);
+  };
+
   const tabs = [
     { v: 'home', label: 'Today', icon: LayoutDashboard },
     { v: 'inventory', label: 'Inventory', icon: Package },
@@ -498,6 +517,7 @@ export default function App() {
             onRestock={(p) => setRestockProduct(p)}
             onMove={openMoveForm}
             onAddNote={openNoteForm}
+            onAddDrink={openDrinkForm}
             onPhotoTap={setPhotoViewerProductId}
           />
         )}
@@ -518,6 +538,7 @@ export default function App() {
             logs={logs} products={products} locations={locations} thumbs={thumbs}
             onEdit={(l) => {
               if (l.type === 'note') { setEditingNote(l); setNoteContext(null); setNoteFormOpen(true); }
+              else if (l.type === 'drink') { setEditingDrink(l); setDrinkFormOpen(true); }
               else { setEditingLog(l); setLogFormOpen(true); }
             }}
             onDelete={(l) => setConfirmDeleteLog(l)}
@@ -616,6 +637,13 @@ export default function App() {
         context={noteContext}
         locations={locations}
         products={products}
+      />
+
+      <DrinkForm
+        open={drinkFormOpen}
+        onClose={() => { setDrinkFormOpen(false); setEditingDrink(null); }}
+        onSave={handleSaveDrink}
+        initial={editingDrink}
       />
 
       <MoveForm
