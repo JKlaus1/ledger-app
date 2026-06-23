@@ -1,16 +1,34 @@
-import React, { useRef, useState } from 'react';
-import { Download, Upload, MapPin, AlertTriangle } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { Download, Upload, MapPin, AlertTriangle, GlassWater } from 'lucide-react';
 import { Modal, ConfirmDialog } from './Common';
 import { exportAll, importAll, clearAll, kvSet } from '../lib/storage';
 import { formatDate } from '../lib/helpers';
+import { DRINK_SIZES, normalizeDrinkPresets } from '../lib/intake';
 
 export default function Settings({
   open, onClose, onOpenLocations, onDataChanged, onShowToast,
-  lastBackupAt, onBackedUp,
+  lastBackupAt, onBackedUp, drinkPresets, onSaveDrinkPresets,
 }) {
   const fileRef = useRef(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmImport, setConfirmImport] = useState(null);
+
+  // Editable copy of the per-bucket drink ounces, seeded from the live presets.
+  const [sizeDraft, setSizeDraft] = useState(() => normalizeDrinkPresets(drinkPresets));
+  useEffect(() => {
+    if (open) setSizeDraft(normalizeDrinkPresets(drinkPresets));
+  }, [open, drinkPresets]);
+
+  const saveSizes = async () => {
+    const next = normalizeDrinkPresets(sizeDraft);
+    try {
+      await kvSet('drinkSizePresets', next);
+      onSaveDrinkPresets?.(next);
+      onShowToast?.('Drink sizes saved');
+    } catch {
+      onShowToast?.('Could not save drink sizes');
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -120,6 +138,34 @@ export default function Settings({
                 e.target.value = '';
               }}
             />
+          </div>
+
+          <hr className="hairline" />
+
+          <div className="eyebrow">Drink sizes</div>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>
+            Ounces behind each size bucket, used to estimate daily intake. Set these to your usual cups and bottles. A logged drink's exact amount, when given, overrides these.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            {DRINK_SIZES.map((sz) => (
+              <div key={sz.value}>
+                <label className="label">{sz.label}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    className="input"
+                    type="number" inputMode="decimal" min="1" step="1"
+                    value={sizeDraft[sz.value]}
+                    onChange={(e) => setSizeDraft((d) => ({ ...d, [sz.value]: e.target.value }))}
+                  />
+                  <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>oz</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div>
+            <button className="btn btn-ghost" onClick={saveSizes}>
+              <GlassWater size={14} /> Save drink sizes
+            </button>
           </div>
 
           <hr className="hairline" />

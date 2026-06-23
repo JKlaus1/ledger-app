@@ -17,9 +17,9 @@ import {
   CHANGE_REASONS, contextLabel, unitCost, fmtMoney,
   LEAK_ESCAPE, LEAK_SEVERITY,
 } from '../lib/session';
-import { isDrink, DRINK_KINDS, drinkKindLabel, drinkSizeOz } from '../lib/intake';
+import { isDrink, DRINK_KINDS, drinkKindLabel, drinkVolumeOz } from '../lib/intake';
 
-export default function Insights({ products, logs, locations, thumbs, daysRemainingMap }) {
+export default function Insights({ products, logs, locations, thumbs, daysRemainingMap, drinkPresets = null }) {
   // Filter out moves - they're inventory transfers, not consumption
   const usageLogs = logs.filter((l) => l.type !== 'move');
 
@@ -318,16 +318,21 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
   // Fluid intake — drinks logged, by kind, and a rough daily volume.
   const intakeAgg = useMemo(() => {
     const drinks = logs.filter(isDrink);
-    const byKind = {}; let totalOz = 0;
-    drinks.forEach((d) => { byKind[d.kind] = (byKind[d.kind] || 0) + 1; totalOz += drinkSizeOz(d.size); });
+    const byKind = {}; let totalOz = 0; let exactCount = 0;
+    drinks.forEach((d) => {
+      byKind[d.kind] = (byKind[d.kind] || 0) + 1;
+      totalOz += drinkVolumeOz(d, drinkPresets); // exact oz when given, else preset bucket
+      if (Number(d.oz) > 0) exactCount += 1;
+    });
     return {
       count: drinks.length,
       totalOz,
+      exactCount,
       perDay: trackingDays > 0 ? drinks.length / trackingDays : 0,
       ozPerDay: trackingDays > 0 ? totalOz / trackingDays : 0,
       kindRows: DRINK_KINDS.map((k) => ({ ...k, count: byKind[k.value] || 0 })).filter((r) => r.count > 0),
     };
-  }, [logs, trackingDays]);
+  }, [logs, trackingDays, drinkPresets]);
 
   // Format an hour (0–23) as a compact 12-hour label, e.g. 3a, 12p, 9p.
   const fmtHour = (h) => {
@@ -729,7 +734,7 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
             fontSize: 12, color: 'var(--ink-mute)',
             marginTop: -8, marginBottom: 12, fontStyle: 'italic',
           }}>
-            Drinks you've logged. As this builds up it can be lined up against wetting timing and volume.
+            Drinks you've logged. As this builds up it can be lined up against wetting timing and volume.{intakeAgg.count > 0 && (intakeAgg.exactCount > 0 ? ` Volume uses exact amounts where given (${intakeAgg.exactCount} of ${intakeAgg.count}) and your size presets otherwise.` : ' Volume uses your size presets — add exact amounts on a drink to refine it.')}
           </p>
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',

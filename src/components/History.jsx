@@ -216,6 +216,7 @@ export default function History({
                             <div style={{ fontSize: 14 }}>
                               {drinkKindLabel(l.kind)}
                               {l.size && <span style={{ color: 'var(--ink-mute)' }}> · {drinkSizeLabel(l.size).toLowerCase()}</span>}
+                              {Number(l.oz) > 0 && <span style={{ color: 'var(--ink-mute)' }}> · {l.oz}oz</span>}
                             </div>
                             <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 4 }}>
                               <span style={{ color: 'var(--primary)' }}>Drink</span>

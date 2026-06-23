@@ -22,6 +22,7 @@ import PhotoViewer from './components/PhotoViewer';
 import WettingForm from './components/WettingForm';
 import NoteForm from './components/NoteForm';
 import DrinkForm from './components/DrinkForm';
+import { DEFAULT_DRINK_PRESETS, normalizeDrinkPresets } from './lib/intake';
 import { CHANGE_OUT_WINDOW_MS } from './lib/session';
 
 import {
@@ -41,6 +42,7 @@ export default function App() {
 
   // Backup reminder
   const [lastBackupAt, setLastBackupAt] = useState(null);
+  const [drinkPresets, setDrinkPresets] = useState(DEFAULT_DRINK_PRESETS);
   const [backupDismissed, setBackupDismissed] = useState(false);
 
   // UI state
@@ -101,6 +103,7 @@ export default function App() {
       setLogs(lg || []);
       setThumbs(th || {});
       try { setLastBackupAt(await kvGet('lastBackupAt')); } catch { /* ignore */ }
+      try { setDrinkPresets(normalizeDrinkPresets(await kvGet('drinkSizePresets'))); } catch { /* ignore */ }
     } catch (e) {
       console.error('Load failed', e);
     }
@@ -550,6 +553,7 @@ export default function App() {
           <Insights
             products={products} logs={logs} locations={locations} thumbs={thumbs}
             daysRemainingMap={daysRemainingMap}
+            drinkPresets={drinkPresets}
           />
         )}
       </main>
@@ -644,6 +648,7 @@ export default function App() {
         onClose={() => { setDrinkFormOpen(false); setEditingDrink(null); }}
         onSave={handleSaveDrink}
         initial={editingDrink}
+        presets={drinkPresets}
       />
 
       <MoveForm
@@ -681,6 +686,8 @@ export default function App() {
         onShowToast={setToastMsg}
         lastBackupAt={lastBackupAt}
         onBackedUp={(ts) => { setLastBackupAt(ts); setBackupDismissed(true); }}
+        drinkPresets={drinkPresets}
+        onSaveDrinkPresets={setDrinkPresets}
       />
 
       <PhotoViewer

@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Check, GlassWater } from 'lucide-react';
 import { Modal } from './Common';
 import { uid, toLocalInputValue, fromLocalInputValue } from '../lib/helpers';
-import { DRINK_KINDS, DRINK_SIZES } from '../lib/intake';
+import { DRINK_KINDS, DRINK_SIZES, drinkSizeOz } from '../lib/intake';
 
 // DrinkForm — log a fluid intake (type: 'drink'). Free-standing and
-// backdatable, mirroring NoteForm. Intake is tracked to correlate against
-// wetting timing and volume over time.
-export default function DrinkForm({ open, onClose, onSave, initial }) {
+// backdatable. `size` is a quick bucket; the exact-oz field is optional and,
+// when filled, becomes the volume used in totals. `presets` supplies the
+// per-bucket ounce values shown alongside each size.
+export default function DrinkForm({ open, onClose, onSave, initial, presets = null }) {
   const [kind, setKind] = useState('water');
   const [size, setSize] = useState('medium');
+  const [oz, setOz] = useState('');
   const [at, setAt] = useState('');
   const [note, setNote] = useState('');
 
@@ -18,11 +20,13 @@ export default function DrinkForm({ open, onClose, onSave, initial }) {
     if (initial) {
       setKind(initial.kind || 'water');
       setSize(initial.size || 'medium');
+      setOz(initial.oz != null ? String(initial.oz) : '');
       setAt(toLocalInputValue(initial.timestamp || Date.now()));
       setNote(initial.note || '');
     } else {
       setKind('water');
       setSize('medium');
+      setOz('');
       setAt(toLocalInputValue(Date.now()));
       setNote('');
     }
@@ -30,12 +34,14 @@ export default function DrinkForm({ open, onClose, onSave, initial }) {
 
   const submit = () => {
     const ts = fromLocalInputValue(at) || Date.now();
+    const exact = Number(oz);
     onSave({
       id: initial?.id || uid(),
       type: 'drink',
       timestamp: ts,
       kind,
       size,
+      oz: Number.isFinite(exact) && exact > 0 ? exact : null,
       note: note.trim() || null,
       createdAt: initial?.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -91,9 +97,27 @@ export default function DrinkForm({ open, onClose, onSave, initial }) {
                 onClick={() => setSize(s.value)}
               >
                 {s.label}
+                <span style={{ opacity: 0.6, marginLeft: 4 }}>{drinkSizeOz(s.value, presets)}oz</span>
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <label className="label">Exact amount (oz, optional)</label>
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="1"
+            placeholder={`Defaults to ${drinkSizeOz(size, presets)}oz for ${size}`}
+            value={oz}
+            onChange={(e) => setOz(e.target.value)}
+          />
+          <p style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
+            Fill this in when you know the real amount (a 20oz bottle, a 12oz can). Leave blank to use the size estimate.
+          </p>
         </div>
 
         <div>
