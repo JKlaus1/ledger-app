@@ -432,7 +432,7 @@ export default function History({
                               <Droplets size={14} />
                             </button>
                           )}
-                          {!isMove && (l.putOnAt && l.takenOffAt == null) && (
+                          {!isMove && (
                             <button
                               className="btn-icon"
                               onClick={() => onEdit(l)}
