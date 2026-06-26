@@ -239,6 +239,29 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
     return { count: rated.length, overall, productRows };
   }, [usageLogs, products]);
 
+  // Sleep wettings — how often wettings happen while asleep, split into naps
+  // (asleep during a day wear) vs overnight (asleep during a night wear), and
+  // what share of overnight wears had a sleep-wetting at all.
+  const sleepAgg = useMemo(() => {
+    const sessions = usageLogs.filter((l) => l.putOnAt);
+    let asleep = 0, awake = 0, napAsleep = 0, nightAsleep = 0;
+    let nightSessions = 0, nightWithSleepWet = 0;
+    sessions.forEach((l) => {
+      const wets = getWettings(l).filter((w) => eventKind(w) === 'wet');
+      let hadSleepWet = false;
+      wets.forEach((w) => {
+        if (w.asleep) {
+          asleep += 1; hadSleepWet = true;
+          if (l.period === 'night') nightAsleep += 1; else napAsleep += 1;
+        } else awake += 1;
+      });
+      if (l.period === 'night') { nightSessions += 1; if (hadSleepWet) nightWithSleepWet += 1; }
+    });
+    const totalWet = asleep + awake;
+    return { asleep, awake, totalWet, napAsleep, nightAsleep, nightSessions, nightWithSleepWet,
+      rate: totalWet ? asleep / totalWet : 0, any: asleep > 0 };
+  }, [usageLogs]);
+
   // Usage + leak rate broken down by the context it was worn in.
   const contextStats = useMemo(() => {
     const m = new Map();
@@ -757,6 +780,54 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {/* Sleep wettings */}
+      {sleepAgg.any && (
+        <section style={{ marginBottom: 36 }}>
+          <SectionHeader number={secNum()} title="Sleep wettings" />
+          <p style={{
+            fontSize: 12, color: 'var(--ink-mute)',
+            marginTop: -8, marginBottom: 12, fontStyle: 'italic',
+          }}>
+            How often wettings happen while you're asleep — naps (asleep on a day wear) vs overnight (asleep on a night wear).
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 26, lineHeight: 1 }}>{sleepAgg.asleep}</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Asleep wettings</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 26, lineHeight: 1 }}>{Math.round(sleepAgg.rate * 100)}%</div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Of all wettings</div>
+            </div>
+            <div className="stat-divider" style={{ paddingTop: 10 }}>
+              <div className="num" style={{ fontSize: 26, lineHeight: 1 }}>
+                {sleepAgg.nightWithSleepWet}<span style={{ fontSize: 15, color: 'var(--ink-mute)' }}>/{sleepAgg.nightSessions}</span>
+              </div>
+              <div className="eyebrow" style={{ marginTop: 6 }}>Nights with one</div>
+            </div>
+          </div>
+          <div className="card" style={{ padding: 4 }}>
+            {[
+              { label: 'Overnight (night wears)', count: sleepAgg.nightAsleep },
+              { label: 'Naps (day wears)', count: sleepAgg.napAsleep },
+            ].map((row) => {
+              const pct = sleepAgg.asleep ? (row.count / sleepAgg.asleep) * 100 : 0;
+              return (
+                <div key={row.label} className="row-divider" style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{row.label}</span>
+                    <span className="num" style={{ fontSize: 16 }}>{row.count}</span>
+                  </div>
+                  <div style={{ height: 3, background: 'var(--line-soft)', borderRadius: 2, marginTop: 8 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 2 }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

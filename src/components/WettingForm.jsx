@@ -28,6 +28,7 @@ function describeEvent(w) {
   if (w.posture) bits.push(postureLabel(w.posture).toLowerCase());
   if (w.tapes) bits.push(`tapes ${tapeLabel(w.tapes).toLowerCase()}`);
   if (w.control) bits.push(controlLabel(w.control).toLowerCase());
+  if (w.asleep) bits.push('asleep');
   return head + (bits.length ? ` · ${bits.join(' · ')}` : '');
 }
 
@@ -169,6 +170,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
   const [tapes, setTapes] = useState('');
   const [posture, setPosture] = useState('');
   const [control, setControl] = useState('');
+  const [asleep, setAsleep] = useState(false);
   const [toiletWhat, setToiletWhat] = useState('');
   const [note, setNote] = useState('');
 
@@ -187,6 +189,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     setTapes('');
     setPosture('');
     setControl('');
+    setAsleep(false);
     setToiletWhat('');
     setNote('');
   };
@@ -218,12 +221,12 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     let fields;
     if (kind === 'toilet') {
       fields = { ...base, toiletWhat: toiletWhat || null,
-        amount: null, feel: null, core: null, tapes: null, posture: null, control: null };
+        amount: null, feel: null, core: null, tapes: null, posture: null, control: null, asleep: false };
     } else {
       fields = { ...base,
         amount: kind === 'wet' ? amount : null,
         feel: feel || null, core: core || null, tapes: tapes || null,
-        posture: posture || null, control: control || null, toiletWhat: null };
+        posture: posture || null, control: control || null, toiletWhat: null, asleep: !!asleep };
     }
     if (editingId) {
       persist(list.map((w) => (w.id === editingId ? { ...w, ...fields } : w)));
@@ -243,6 +246,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     setTapes(w.tapes || '');
     setPosture(w.posture || '');
     setControl(w.control || '');
+    setAsleep(!!w.asleep);
     setToiletWhat(w.toiletWhat || '');
     setNote(w.note || '');
   };
@@ -379,6 +383,18 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
               <div>
                 <label className="label">Was it…? (optional)</label>
                 <OptionGrid options={CONTROL_LEVELS} value={control} onPick={setControl} cols={3} />
+              </div>
+
+              <div>
+                <label className="label">Were you asleep?</label>
+                <button
+                  type="button"
+                  className={`check-row ${asleep ? 'active' : ''}`}
+                  onClick={() => setAsleep(!asleep)}
+                >
+                  <span style={{ flex: 1 }}>{asleep ? 'Yes — happened while asleep' : 'No — awake'}</span>
+                  {asleep && <Check size={14} />}
+                </button>
               </div>
 
               <div>
