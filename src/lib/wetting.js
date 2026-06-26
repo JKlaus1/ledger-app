@@ -49,6 +49,15 @@ export const POSTURES = [
   { value: 'active',   label: 'Walking / active', order: 4 },
 ];
 
+// When lying down, which way you were facing. Optional sub-detail of posture
+// (only meaningful when posture is 'lying'). Explains front-dry/rear-wet
+// patterns — e.g. on your stomach, fluid runs to the rear and between the legs.
+export const LIE_POSITIONS = [
+  { value: 'back',    label: 'On my back',    order: 1 },
+  { value: 'side',    label: 'On my side',    order: 2 },
+  { value: 'stomach', label: 'On my stomach', order: 3 },
+];
+
 // What kind of event this entry is.
 export const EVENT_KINDS = [
   { value: 'wet',    label: 'Wetting' },
@@ -79,6 +88,7 @@ export const wetnessLabel = (v) => wetnessMeta(v)?.label || '—';
 export const feelLabel = (v) => feelMeta(v)?.label || '—';
 export const coreFeelLabel = (v) => coreFeelMeta(v)?.label || '—';
 export const postureLabel = (v) => postureMeta(v)?.label || '—';
+export const lieLabel = (v) => LIE_POSITIONS.find((p) => p.value === v)?.label || null;
 
 export const eventKind = (e) => (e && e.kind) || 'wet';
 export const eventIsWet = (e) => eventKind(e) === 'wet';

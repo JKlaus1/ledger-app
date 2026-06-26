@@ -116,6 +116,7 @@ const labelOf = (arr, v) => arr.find((x) => x.value === v)?.label || null;
 export const WICKING = [
   { value: 'front', label: 'Front only', order: 1 },
   { value: 'crotch', label: 'Front & between legs', order: 2 },
+  { value: 'back', label: 'Rear & between, front dry', order: 2 },
   { value: 'rear', label: 'Reached the rear', order: 3 },
   { value: 'even', label: 'Used evenly throughout', order: 4 },
 ];

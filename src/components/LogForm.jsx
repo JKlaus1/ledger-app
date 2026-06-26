@@ -7,6 +7,28 @@ import {
   toLocalInputValue, fromLocalInputValue,
   productDisplayName, stockAt,
 } from '../lib/helpers';
+import {
+  ACTIVITY_LEVELS, CORE_CONDITIONS, TAPE_STATES, CHANGE_REASONS, SKIN_STATES,
+  CLEANUP_METHODS, LEAK_ESCAPE, LEAK_SEVERITY, WICKING,
+} from '../lib/session';
+
+// A small selectable grid; clicking the active option clears it (optional field).
+function Grid({ options, value, onPick, cols = 2 }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+      {options.map((o) => (
+        <button
+          key={o.value} type="button"
+          className={`check-row ${value === o.value ? 'active' : ''}`}
+          onClick={() => onPick(value === o.value ? '' : o.value)}
+        >
+          <span style={{ flex: 1 }}>{o.label}</span>
+          {value === o.value && <Check size={14} />}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function LogForm({
   open, onClose, onSave, products, locations, initial, defaultProductId,
@@ -19,6 +41,11 @@ export default function LogForm({
     performance: 'used',
     notes: '',
     decrementInventory: true,
+    // take-off detail (only used when editing a completed wear)
+    takenOffAt: null,
+    activity: '', core: '', tapes: '', changeReason: '', skin: '',
+    cream: false, creamProduct: '', cleanup: [],
+    wicking: '', leakEscape: '', leakSeverity: '',
   };
   const [form, setForm] = useState(blank);
 
@@ -33,6 +60,18 @@ export default function LogForm({
           performance: initial.performance || 'used',
           notes: initial.notes || '',
           decrementInventory: false,
+          takenOffAt: initial.takenOffAt || null,
+          activity: initial.activity || '',
+          core: initial.core || '',
+          tapes: initial.tapes || '',
+          changeReason: initial.changeReason || '',
+          skin: initial.skin || '',
+          cream: !!initial.cream,
+          creamProduct: initial.creamProduct || '',
+          cleanup: Array.isArray(initial.cleanup) ? initial.cleanup : [],
+          wicking: initial.wicking || '',
+          leakEscape: initial.leakEscape || '',
+          leakSeverity: initial.leakSeverity || '',
         });
       } else {
         setForm({
@@ -48,14 +87,21 @@ export default function LogForm({
   }, [open, initial, defaultProductId]);
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const toggleCleanup = (v) =>
+    setForm((f) => ({
+      ...f,
+      cleanup: f.cleanup.includes(v) ? f.cleanup.filter((x) => x !== v) : [...f.cleanup, v],
+    }));
 
   const product = products.find((p) => p.id === form.productId);
-  // Limit location choices to those where this product currently has stock
   const availableLocations = locations
     .filter((loc) => initial ? true : stockAt(product, loc.id) > 0)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
   const valid = form.productId && form.locationId;
+  // A taken-off wear — show its full take-off detail for viewing/editing.
+  const isCompleted = !!(initial && initial.takenOffAt);
+  const isLeak = form.performance === 'leak';
 
   const submit = () => {
     if (!valid) return;
@@ -71,8 +117,21 @@ export default function LogForm({
       performance: form.performance,
       notes: form.notes.trim(),
     };
-    // For wear-based entries, keep the put-on time in sync with the edited time
     if (initial?.putOnAt) out.putOnAt = form.timestamp;
+    if (isCompleted) {
+      out.takenOffAt = Math.max(form.takenOffAt || initial.takenOffAt, form.timestamp);
+      out.activity = form.activity || null;
+      out.core = form.core || null;
+      out.tapes = form.tapes || null;
+      out.changeReason = form.changeReason || null;
+      out.skin = form.skin || null;
+      out.cream = !!form.cream;
+      out.creamProduct = form.cream ? (form.creamProduct.trim() || null) : null;
+      out.cleanup = form.cleanup.length ? form.cleanup : null;
+      out.wicking = form.wicking || null;
+      out.leakEscape = isLeak ? (form.leakEscape || null) : null;
+      out.leakSeverity = isLeak ? (form.leakSeverity || null) : null;
+    }
     onSave(out, form.decrementInventory && !initial);
   };
 
@@ -152,7 +211,7 @@ export default function LogForm({
         </div>
 
         <div>
-          <label className="label">When</label>
+          <label className="label">{isCompleted ? 'Put on' : 'When'}</label>
           <input
             className="input" type="datetime-local"
             value={toLocalInputValue(form.timestamp)}
@@ -195,6 +254,124 @@ export default function LogForm({
             ))}
           </div>
         </div>
+
+        {isCompleted && (
+          <>
+            <hr className="hairline" />
+            <div className="eyebrow">Take-off details</div>
+
+            <div>
+              <label className="label">Taken off</label>
+              <input
+                className="input" type="datetime-local"
+                value={toLocalInputValue(form.takenOffAt || initial.takenOffAt)}
+                onChange={(e) => update('takenOffAt', fromLocalInputValue(e.target.value))}
+              />
+            </div>
+
+            {isLeak && (
+              <>
+                <div>
+                  <label className="label">Where did it leak?</label>
+                  <Grid options={LEAK_ESCAPE} value={form.leakEscape} onPick={(v) => update('leakEscape', v)} />
+                </div>
+                <div>
+                  <label className="label">How bad?</label>
+                  <Grid options={LEAK_SEVERITY} value={form.leakSeverity} onPick={(v) => update('leakSeverity', v)} />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="label">How well did it wick through the padding?</label>
+              <Grid options={WICKING} value={form.wicking} onPick={(v) => update('wicking', v)} cols={1} />
+            </div>
+
+            <div>
+              <label className="label">How active were you?</label>
+              <Grid options={ACTIVITY_LEVELS} value={form.activity} onPick={(v) => update('activity', v)} />
+            </div>
+
+            <div>
+              <label className="label">How did the padding hold up?</label>
+              <Grid options={CORE_CONDITIONS} value={form.core} onPick={(v) => update('core', v)} />
+            </div>
+
+            <div>
+              <label className="label">Tape trouble?</label>
+              <Grid options={TAPE_STATES} value={form.tapes} onPick={(v) => update('tapes', v)} />
+            </div>
+
+            <div>
+              <label className="label">Why the change?</label>
+              <select
+                className="select"
+                value={form.changeReason}
+                onChange={(e) => update('changeReason', e.target.value)}
+              >
+                <option value="">Not set</option>
+                {CHANGE_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Skin check</label>
+              <div className="seg" style={{ width: '100%' }}>
+                {SKIN_STATES.map((sk) => (
+                  <button
+                    key={sk.value}
+                    type="button" style={{ flex: 1 }}
+                    className={`seg-btn ${form.skin === sk.value ? 'active' : ''}`}
+                    onClick={() => update('skin', form.skin === sk.value ? '' : sk.value)}
+                  >
+                    {sk.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Cleanup</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {CLEANUP_METHODS.map((m) => (
+                  <button
+                    key={m.value} type="button"
+                    className={`check-row ${form.cleanup.includes(m.value) ? 'active' : ''}`}
+                    onClick={() => toggleCleanup(m.value)}
+                  >
+                    <span style={{ flex: 1 }}>{m.label}</span>
+                    {form.cleanup.includes(m.value) && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Barrier cream applied?</label>
+              <button
+                type="button"
+                className={`check-row ${form.cream ? 'active' : ''}`}
+                onClick={() => update('cream', !form.cream)}
+              >
+                <span style={{ flex: 1 }}>{form.cream ? 'Yes — applied' : 'No'}</span>
+                {form.cream && <Check size={14} />}
+              </button>
+              {form.cream && (
+                <input
+                  className="input"
+                  style={{ marginTop: 8 }}
+                  placeholder="Which cream? (optional)"
+                  value={form.creamProduct}
+                  onChange={(e) => update('creamProduct', e.target.value)}
+                />
+              )}
+            </div>
+
+            <hr className="hairline" />
+          </>
+        )}
 
         <div>
           <label className="label">Notes (optional)</label>

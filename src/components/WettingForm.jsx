@@ -6,9 +6,9 @@ import {
   productDisplayName, formatTime, formatDuration, wearDuration,
 } from '../lib/helpers';
 import {
-  WETNESS, DIAPER_FEEL, CORE_FEEL, POSTURES, EVENT_KINDS, CONTROL_LEVELS, TOILET_WHAT,
+  WETNESS, DIAPER_FEEL, CORE_FEEL, POSTURES, LIE_POSITIONS, EVENT_KINDS, CONTROL_LEVELS, TOILET_WHAT,
   getWettings, wettingStats, eventKind,
-  wetnessLabel, feelLabel, coreFeelLabel, postureLabel,
+  wetnessLabel, feelLabel, coreFeelLabel, postureLabel, lieLabel,
   kindLabel, controlLabel, toiletWhatLabel,
   capacityProfile, globalCapacity, capacityStatus,
 } from '../lib/wetting';
@@ -25,7 +25,7 @@ function describeEvent(w) {
   const bits = [];
   if (w.feel) bits.push(feelLabel(w.feel).toLowerCase());
   if (w.core) bits.push(`core ${coreFeelLabel(w.core).toLowerCase()}`);
-  if (w.posture) bits.push(postureLabel(w.posture).toLowerCase());
+  if (w.posture) bits.push(postureLabel(w.posture).toLowerCase() + (w.posture === 'lying' && w.lieSide ? ` (${lieLabel(w.lieSide).toLowerCase()})` : ''));
   if (w.tapes) bits.push(`tapes ${tapeLabel(w.tapes).toLowerCase()}`);
   if (w.control) bits.push(controlLabel(w.control).toLowerCase());
   if (w.asleep) bits.push('asleep');
@@ -169,6 +169,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
   const [core, setCore] = useState('');
   const [tapes, setTapes] = useState('');
   const [posture, setPosture] = useState('');
+  const [lieSide, setLieSide] = useState('');
   const [control, setControl] = useState('');
   const [asleep, setAsleep] = useState(false);
   const [toiletWhat, setToiletWhat] = useState('');
@@ -188,6 +189,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     setCore('');
     setTapes('');
     setPosture('');
+    setLieSide('');
     setControl('');
     setAsleep(false);
     setToiletWhat('');
@@ -221,12 +223,13 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     let fields;
     if (kind === 'toilet') {
       fields = { ...base, toiletWhat: toiletWhat || null,
-        amount: null, feel: null, core: null, tapes: null, posture: null, control: null, asleep: false };
+        amount: null, feel: null, core: null, tapes: null, posture: null, lieSide: null, control: null, asleep: false };
     } else {
       fields = { ...base,
         amount: kind === 'wet' ? amount : null,
         feel: feel || null, core: core || null, tapes: tapes || null,
-        posture: posture || null, control: control || null, toiletWhat: null, asleep: !!asleep };
+        posture: posture || null, lieSide: posture === 'lying' ? (lieSide || null) : null,
+        control: control || null, toiletWhat: null, asleep: !!asleep };
     }
     if (editingId) {
       persist(list.map((w) => (w.id === editingId ? { ...w, ...fields } : w)));
@@ -245,6 +248,7 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
     setCore(w.core || '');
     setTapes(w.tapes || '');
     setPosture(w.posture || '');
+    setLieSide(w.lieSide || '');
     setControl(w.control || '');
     setAsleep(!!w.asleep);
     setToiletWhat(w.toiletWhat || '');
@@ -405,6 +409,11 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
               <div>
                 <label className="label">Body position? (optional)</label>
                 <OptionGrid options={POSTURES} value={posture} onPick={setPosture} cols={2} />
+                {posture === 'lying' && (
+                  <div style={{ marginTop: 8 }}>
+                    <OptionGrid options={LIE_POSITIONS} value={lieSide} onPick={setLieSide} cols={3} />
+                  </div>
+                )}
               </div>
 
               <div>
