@@ -140,14 +140,28 @@ export const wettingStats = (log) => {
 // Learn, per product, how much wetting "load" it has held before vs. without
 // leaking, so the app can warn as a worn diaper nears the point it has
 // historically given out. Toilet uses contribute nothing (load is wet-only).
+//
+// Two scoping rules keep the numbers honest:
+//   Booster — a session worn WITH a booster has more capacity than the bare
+//   diaper, so boosted and unboosted sessions are profiled separately. A
+//   boosted dry ceiling must never inflate the bare product's ceiling (or
+//   the global one). Pass { booster: true|false } to scope; null means "any"
+//   (legacy behavior, kept for backward compatibility).
+//   Type — the cross-product fallback can be limited to products of the same
+//   type (brief/pullup/pad), so a pull-up is never compared against what a
+//   premium overnight brief once held. Pass { type, products } to scope.
 
 const sessionLoad = (log) => wettingStats(log).load;
 
-export const capacityProfile = (logs, productId, excludeLogId = null) => {
-  const sessions = (logs || []).filter(
-    (l) => l.productId === productId && l.putOnAt &&
-           l.id !== excludeLogId && wettingStats(l).count > 0
-  );
+// Does a profile carry any usable signal at all?
+export const hasCapacitySignal = (o) =>
+  !!(o && (o.leakFloor != null || o.dryCeiling != null));
+
+const boosterMatches = (l, booster) =>
+  booster == null || !!l.booster === booster;
+
+// Accumulate dry-ceiling / leak-floor over a set of sessions.
+const profileOf = (sessions) => {
   let dryCeiling = null;
   let leakFloor = null;
   let dryN = 0;
@@ -165,27 +179,41 @@ export const capacityProfile = (logs, productId, excludeLogId = null) => {
   return { dryCeiling, leakFloor, dryN, leakN, sampleN: sessions.length };
 };
 
+export const capacityProfile = (logs, productId, excludeLogId = null, opts = {}) => {
+  const { booster = null } = opts;
+  return profileOf((logs || []).filter(
+    (l) => l.productId === productId && l.putOnAt &&
+           l.id !== excludeLogId && wettingStats(l).count > 0 &&
+           boosterMatches(l, booster)
+  ));
+};
+
+// Profile across a set of product ids — used for a product's variant group,
+// which shares performance stats by design.
+export const groupCapacityProfile = (logs, productIds, excludeLogId = null, opts = {}) => {
+  const { booster = null } = opts;
+  const ids = new Set(productIds || []);
+  return profileOf((logs || []).filter(
+    (l) => ids.has(l.productId) && l.putOnAt &&
+           l.id !== excludeLogId && wettingStats(l).count > 0 &&
+           boosterMatches(l, booster)
+  ));
+};
+
 // A fallback profile across every product, for when a single product has too
-// little history to say anything on its own.
-export const globalCapacity = (logs, excludeLogId = null) => {
-  const sessions = (logs || []).filter(
-    (l) => l.putOnAt && l.id !== excludeLogId && wettingStats(l).count > 0
-  );
-  let dryCeiling = null;
-  let leakFloor = null;
-  let dryN = 0;
-  let leakN = 0;
-  sessions.forEach((l) => {
-    const load = sessionLoad(l);
-    if (l.performance === 'leak') {
-      leakN += 1;
-      if (leakFloor == null || load < leakFloor) leakFloor = load;
-    } else {
-      dryN += 1;
-      if (dryCeiling == null || load > dryCeiling) dryCeiling = load;
-    }
-  });
-  return { dryCeiling, leakFloor, dryN, leakN, sampleN: sessions.length };
+// little history to say anything on its own. Optionally scoped to sessions
+// matching a booster state and/or a product type (type scoping requires the
+// products array to resolve each session's product).
+export const globalCapacity = (logs, excludeLogId = null, opts = {}) => {
+  const { booster = null, type = null, products = null } = opts;
+  const typeOf = type && Array.isArray(products)
+    ? new Map(products.map((p) => [p.id, p.type]))
+    : null;
+  return profileOf((logs || []).filter(
+    (l) => l.putOnAt && l.id !== excludeLogId && wettingStats(l).count > 0 &&
+           boosterMatches(l, booster) &&
+           (!typeOf || typeOf.get(l.productId) === type)
+  ));
 };
 
 // Given a running load and a capacity profile (plus optional fallback),

@@ -10,9 +10,10 @@ import {
   getWettings, wettingStats, eventKind,
   wetnessLabel, feelLabel, coreFeelLabel, postureLabel, lieLabel,
   kindLabel, controlLabel, toiletWhatLabel,
-  capacityProfile, globalCapacity, capacityStatus,
+  capacityProfile, groupCapacityProfile, globalCapacity, capacityStatus, hasCapacitySignal,
 } from '../lib/wetting';
 import { TAPE_STATES, tapeLabel } from '../lib/session';
+import { groupKeyOf } from '../lib/variants';
 
 // One-line description of a single event for the logged-so-far list.
 function describeEvent(w) {
@@ -94,7 +95,9 @@ export function WettingSummary({ log, compact = false, style = {} }) {
 
 // CapacityMeter — how close this diaper's running load is to where it (or
 // similar diapers) have historically leaked. Quiet when there's no basis yet.
-function CapacityMeter({ load, status, isOn }) {
+// `sourceLabel` names whose history the ceiling came from; `boosted` marks
+// that the comparison is against booster-assisted wears.
+function CapacityMeter({ load, status, isOn, sourceLabel, boosted }) {
   if (status.level === 'none' || load <= 0) return null;
 
   const palette = {
@@ -105,22 +108,23 @@ function CapacityMeter({ load, status, isOn }) {
   const { bar, fg, Icon } = palette;
 
   const pct = Math.max(6, Math.min(100, Math.round((status.ratio || 0) * 100)));
-  const where = status.fromProduct ? 'this diaper' : 'similar diapers';
+  const where = sourceLabel || (status.fromProduct ? 'this diaper' : 'similar diapers');
+  const boostTag = boosted ? ' with a booster' : '';
   const ceilTxt = Number.isInteger(status.ceiling) ? status.ceiling : status.ceiling.toFixed(1);
 
   let msg;
   if (status.level === 'over') {
     msg = status.basis === 'leak'
-      ? `At/over the load ${where} has leaked at (~${ceilTxt}).${isOn ? ' Consider changing soon.' : ''}`
-      : `Past the most ${where} held dry (${ceilTxt}) — uncharted territory.`;
+      ? `At/over the load ${where} has leaked at${boostTag} (~${ceilTxt}).${isOn ? ' Consider changing soon.' : ''}`
+      : `Past the most ${where} held dry${boostTag} (${ceilTxt}) — uncharted territory.`;
   } else if (status.level === 'watch') {
     msg = status.basis === 'leak'
-      ? `Nearing the load ${where} has leaked at (~${ceilTxt}).`
-      : `Approaching the most ${where} held dry (${ceilTxt}).`;
+      ? `Nearing the load ${where} has leaked at${boostTag} (~${ceilTxt}).`
+      : `Approaching the most ${where} held dry${boostTag} (${ceilTxt}).`;
   } else {
     msg = status.basis === 'leak'
-      ? `Comfortably under the ~${ceilTxt} load ${where} has leaked at.`
-      : `Under the ${ceilTxt} load ${where} has held dry.`;
+      ? `Comfortably under the ~${ceilTxt} load ${where} has leaked at${boostTag}.`
+      : `Under the ${ceilTxt} load ${where} has held dry${boostTag}.`;
   }
 
   return (
@@ -159,7 +163,7 @@ function OptionGrid({ options, value, onPick, cols = 2 }) {
 }
 
 // WettingForm — add / edit / remove events on a single wear session.
-export default function WettingForm({ open, onClose, entry, product, onSave, logs = [] }) {
+export default function WettingForm({ open, onClose, entry, product, onSave, logs = [], products = [] }) {
   const [list, setList] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [kind, setKind] = useState('wet');
@@ -263,11 +267,44 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
   const stats = wettingStats({ ...entry, wettings: list });
   const dur = wearDuration(entry);
 
-  // Live capacity read against this product's (and all products') history.
-  const profile = capacityProfile(logs, entry.productId, entry.id);
-  const gAll = globalCapacity(logs, entry.id);
-  const fallback = { dryCeiling: gAll.dryCeiling };
-  const capStatus = capacityStatus(stats.load, profile, fallback);
+  // Live capacity read. Sessions worn with a booster hold more than the bare
+  // diaper, so history is compared booster-to-booster: a boosted ceiling
+  // never inflates a bare wear's basis, and vice versa. Basis ladder, most
+  // to least specific:
+  //   1. this product, same booster state
+  //   2. its variant group (variants share performance stats), same state
+  //   3. same product TYPE across the stash, same state — dry ceiling only,
+  //      so one weak product's leak floor can't cry wolf for everything,
+  //      and a pull-up is never held to a premium brief's number
+  //   4. boosted wear only: the bare diaper's own dry ceiling — a booster
+  //      holds at least what the diaper held alone, so this only ever
+  //      warns early, never late
+  const withBooster = !!entry.booster;
+  const TYPE_PLURAL = { brief: 'briefs', pullup: 'pull-ups', pad: 'pads', booster: 'boosters' };
+  const gKey = product ? groupKeyOf(product) : null;
+  const groupIds = gKey
+    ? products.filter((p) => groupKeyOf(p) === gKey).map((p) => p.id)
+    : [entry.productId];
+
+  const own = capacityProfile(logs, entry.productId, entry.id, { booster: withBooster });
+  const grp = groupCapacityProfile(logs, groupIds, entry.id, { booster: withBooster });
+  const typed = globalCapacity(logs, entry.id, {
+    booster: withBooster, type: product?.type || null, products,
+  });
+  const bareOwn = withBooster
+    ? capacityProfile(logs, entry.productId, entry.id, { booster: false })
+    : null;
+
+  const ladder = [
+    { p: own, label: 'this diaper', boosted: withBooster },
+    { p: grp, label: "this diaper's variants", boosted: withBooster },
+    { p: { dryCeiling: typed.dryCeiling }, label: `similar ${TYPE_PLURAL[product?.type] || 'diapers'}`, boosted: withBooster },
+    ...(withBooster && bareOwn
+      ? [{ p: { dryCeiling: bareOwn.dryCeiling }, label: 'this diaper without a booster', boosted: false }]
+      : []),
+  ];
+  const basis = ladder.find((x) => hasCapacitySignal(x.p)) || null;
+  const capStatus = capacityStatus(stats.load, basis ? basis.p : null, null);
   const isOn = entry.takenOffAt == null;
 
   const isToilet = kind === 'toilet';
@@ -293,7 +330,13 @@ export default function WettingForm({ open, onClose, entry, product, onSave, log
             {stats.bmCount > 0 && ` · ${stats.bmCount} BM`}
             {stats.toiletCount > 0 && ` · ${stats.toiletCount} toilet`}
           </div>
-          <CapacityMeter load={stats.load} status={capStatus} isOn={isOn} />
+          <CapacityMeter
+            load={stats.load}
+            status={capStatus}
+            isOn={isOn}
+            sourceLabel={basis?.label}
+            boosted={!!basis?.boosted}
+          />
         </div>
 
         {/* Existing events */}

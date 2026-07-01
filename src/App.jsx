@@ -670,6 +670,7 @@ export default function App() {
         product={wettingEntry ? products.find((p) => p.id === wettingEntry.productId) : null}
         onSave={handleSaveWettings}
         logs={logs}
+        products={products}
       />
 
       <NoteForm

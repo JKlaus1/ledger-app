@@ -102,16 +102,26 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
   }, [usageLogs]);
 
   // Per-product capacity: average "load" (summed wetting weight) on sessions
-  // that leaked vs. the most it held on a session that did NOT leak.
+  // that leaked vs. the most it held on a session that did NOT leak. Boosted
+  // wears are tallied separately — a booster adds capacity, so mixing them in
+  // would inflate the bare diaper's numbers.
   const capacityByProduct = useMemo(() => {
     const m = new Map();
     usageLogs.filter((l) => l.putOnAt).forEach((l) => {
       const st = wettingStats(l);
       if (st.count === 0) return;
-      if (!m.has(l.productId)) m.set(l.productId, { leakLoads: [], heldLoads: [] });
+      if (!m.has(l.productId)) {
+        m.set(l.productId, { leakLoads: [], heldLoads: [], bLeakLoads: [], bHeldLoads: [] });
+      }
       const e = m.get(l.productId);
-      if (l.performance === 'leak') e.leakLoads.push(st.load);
-      else e.heldLoads.push(st.load); // dry / used = held without leaking
+      if (l.booster) {
+        if (l.performance === 'leak') e.bLeakLoads.push(st.load);
+        else e.bHeldLoads.push(st.load);
+      } else if (l.performance === 'leak') {
+        e.leakLoads.push(st.load);
+      } else {
+        e.heldLoads.push(st.load); // dry / used = held without leaking
+      }
     });
     const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
     return [...m.entries()]
@@ -122,14 +132,26 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
         maxHeld: e.heldLoads.length ? Math.max(...e.heldLoads) : null,
         leakCount: e.leakLoads.length,
         heldCount: e.heldLoads.length,
+        boostedMaxHeld: e.bHeldLoads.length ? Math.max(...e.bHeldLoads) : null,
+        boostedAvgLeak: avg(e.bLeakLoads),
+        boostedN: e.bLeakLoads.length + e.bHeldLoads.length,
       }))
-      .filter((x) => x.product && (x.leakCount + x.heldCount) >= 1)
-      .sort((a, b) => (b.avgLeakLoad ?? b.maxHeld ?? 0) - (a.avgLeakLoad ?? a.maxHeld ?? 0));
+      .filter((x) => x.product && (x.leakCount + x.heldCount + x.boostedN) >= 1)
+      .sort((a, b) =>
+        (b.avgLeakLoad ?? b.maxHeld ?? b.boostedMaxHeld ?? 0) -
+        (a.avgLeakLoad ?? a.maxHeld ?? a.boostedMaxHeld ?? 0));
   }, [usageLogs, products]);
 
-  // A blunt fallback ceiling across all products, shown so the live capacity
-  // warning's basis is visible here too.
-  const globalCap = useMemo(() => globalCapacity(usageLogs), [usageLogs]);
+  // Fallback ceilings across all products, shown so the live capacity
+  // warning's basis is visible here too — bare and boosted kept apart.
+  const globalCap = useMemo(
+    () => globalCapacity(usageLogs, null, { booster: false }),
+    [usageLogs]
+  );
+  const globalCapBoosted = useMemo(
+    () => globalCapacity(usageLogs, null, { booster: true }),
+    [usageLogs]
+  );
 
   // Wetting distribution by hour of day (0–23), across every session.
   const wettingByHour = useMemo(() => {
@@ -676,20 +698,36 @@ export default function Insights({ products, logs, locations, thumbs, daysRemain
                           held up to <span className="num">{c.maxHeld}</span> dry <span style={{ color: 'var(--ink-mute)' }}>({c.heldCount}×)</span>
                         </span>
                       )}
+                      {c.boostedN > 0 && (
+                        <span style={{ color: 'var(--ink-soft)' }}>
+                          + booster:{' '}
+                          {c.boostedMaxHeld != null && (
+                            <>held <span className="num">{c.boostedMaxHeld}</span></>
+                          )}
+                          {c.boostedMaxHeld != null && c.boostedAvgLeak != null && ', '}
+                          {c.boostedAvgLeak != null && (
+                            <>leaked <span className="num">~{c.boostedAvgLeak.toFixed(1)}</span></>
+                          )}
+                          <span style={{ color: 'var(--ink-mute)' }}> ({c.boostedN}×)</span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-              {(globalCap.dryCeiling != null || globalCap.leakFloor != null) && (
+              {(globalCap.dryCeiling != null || globalCap.leakFloor != null || globalCapBoosted.dryCeiling != null) && (
                 <p style={{
                   fontSize: 11, color: 'var(--ink-mute)',
                   marginTop: 10, fontStyle: 'italic',
                 }}>
-                  Across all products, the most held dry was a load of{' '}
+                  Without a booster, the most any diaper held dry was a load of{' '}
                   <span className="num">{globalCap.dryCeiling ?? '—'}</span>
                   {globalCap.leakFloor != null && (
                     <>; leaks have started as low as <span className="num">{globalCap.leakFloor}</span></>
-                  )}. A worn diaper nearing these gets a heads-up on its wettings screen.
+                  )}
+                  {globalCapBoosted.dryCeiling != null && (
+                    <>. With a booster, the most held dry was <span className="num">{globalCapBoosted.dryCeiling}</span></>
+                  )}. The live heads-up on a worn diaper compares like with like: its own history first, then its variants, then other diapers of the same type — booster wears against booster wears.
                 </p>
               )}
             </>
