@@ -490,7 +490,8 @@ export default function App() {
       </header>
 
       <main className="with-bottom-nav" style={{
-        maxWidth: 760, margin: '0 auto', padding: '24px 20px',
+        maxWidth: 760, margin: '0 auto',
+        paddingTop: 24, paddingLeft: 20, paddingRight: 20,
       }}>
         {needsBackup && (
           <div className="card" style={{
