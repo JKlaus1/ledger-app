@@ -1,9 +1,13 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Download, Upload, MapPin, AlertTriangle, GlassWater } from 'lucide-react';
+import { Download, Upload, MapPin, AlertTriangle, GlassWater, CloudUpload, Check } from 'lucide-react';
 import { Modal, ConfirmDialog } from './Common';
 import { exportAll, importAll, clearAll, kvSet } from '../lib/storage';
 import { formatDate } from '../lib/helpers';
 import { DRINK_SIZES, normalizeDrinkPresets } from '../lib/intake';
+import {
+  getAutoBackupConfig, saveAutoBackupConfig,
+  getAutoBackupLastError, runAutoBackup,
+} from '../lib/autobackup';
 
 export default function Settings({
   open, onClose, onOpenLocations, onDataChanged, onShowToast,
@@ -18,6 +22,46 @@ export default function Settings({
   useEffect(() => {
     if (open) setSizeDraft(normalizeDrinkPresets(drinkPresets));
   }, [open, drinkPresets]);
+
+  // Auto-backup to the home server. Config (enabled + token) lives in kv on
+  // this device only. The token never goes anywhere near the repo.
+  const [autoCfg, setAutoCfg] = useState({ enabled: false, token: '' });
+  const [autoErr, setAutoErr] = useState(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      setAutoCfg(await getAutoBackupConfig());
+      setAutoErr(await getAutoBackupLastError());
+    })();
+  }, [open]);
+
+  const saveAuto = async (next) => {
+    setAutoCfg(next);
+    try {
+      await saveAutoBackupConfig(next);
+    } catch {
+      onShowToast?.('Could not save auto-backup settings');
+    }
+  };
+
+  const backupNow = async () => {
+    setAutoBusy(true);
+    // Persist whatever's typed in the token field before trying it.
+    try { await saveAutoBackupConfig(autoCfg); } catch { /* ignore */ }
+    const res = await runAutoBackup({ force: true });
+    setAutoBusy(false);
+    if (res.ok) {
+      setAutoErr(null);
+      onBackedUp?.(res.at);
+      onShowToast?.('Backed up to server');
+    } else if (res.skipped) {
+      onShowToast?.('Turn it on and enter the token first');
+    } else {
+      setAutoErr(res.error);
+      onShowToast?.(res.error?.message || 'Backup failed');
+    }
+  };
 
   const saveSizes = async () => {
     const next = normalizeDrinkPresets(sizeDraft);
@@ -146,6 +190,52 @@ export default function Settings({
               }}
             />
           </div>
+
+          <hr className="hairline" />
+
+          <div className="eyebrow">Auto-backup to home server</div>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>
+            When turned on, the app quietly uploads a full backup to your server about once a day (and keeps a rolling set there). Your data still lives on this phone — this is just a safety net.
+          </p>
+          <button
+            type="button"
+            className={`check-row ${autoCfg.enabled ? 'active' : ''}`}
+            onClick={() => saveAuto({ ...autoCfg, enabled: !autoCfg.enabled })}
+          >
+            <span style={{ flex: 1 }}>
+              {autoCfg.enabled ? 'Auto-backup is on' : 'Auto-backup is off'}
+            </span>
+            {autoCfg.enabled && <Check size={14} />}
+          </button>
+          {autoCfg.enabled && (
+            <>
+              <div>
+                <label className="label">Backup token</label>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="Paste the token from your server setup"
+                  value={autoCfg.token}
+                  onChange={(e) => setAutoCfg((c) => ({ ...c, token: e.target.value }))}
+                  onBlur={() => saveAuto(autoCfg)}
+                />
+                <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
+                  Stored only on this device. The same token you set on the server.
+                </div>
+              </div>
+              {autoErr?.message && (
+                <div style={{ fontSize: 12, color: 'var(--danger)', fontStyle: 'italic' }}>
+                  Last attempt failed: {autoErr.message}
+                </div>
+              )}
+              <div>
+                <button className="btn btn-ghost" onClick={backupNow} disabled={autoBusy}>
+                  <CloudUpload size={14} /> {autoBusy ? 'Uploading…' : 'Back up to server now'}
+                </button>
+              </div>
+            </>
+          )}
 
           <hr className="hairline" />
 

@@ -25,6 +25,7 @@ import DrinkForm from './components/DrinkForm';
 import ToiletForm from './components/ToiletForm';
 import { DEFAULT_DRINK_PRESETS, normalizeDrinkPresets } from './lib/intake';
 import { CHANGE_OUT_WINDOW_MS } from './lib/session';
+import { runAutoBackup } from './lib/autobackup';
 
 import {
   getAllProducts, getAllLocations, getAllLogs, getAllThumbs,
@@ -115,6 +116,22 @@ export default function App() {
   };
 
   useEffect(() => { loadAll(); }, []);
+
+  // Auto-backup: try once shortly after load (so it never competes with
+  // first paint), then hourly while the app stays open. runAutoBackup
+  // itself decides whether it's enabled, configured, due, and online —
+  // if not it's a cheap no-op. A success refreshes lastBackupAt, which
+  // also keeps the 14-day backup nag quiet.
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const res = await runAutoBackup();
+      if (!cancelled && res?.ok && res.at) setLastBackupAt(res.at);
+    };
+    const first = setTimeout(tick, 8000);
+    const iv = setInterval(tick, 60 * 60 * 1000);
+    return () => { cancelled = true; clearTimeout(first); clearInterval(iv); };
+  }, []);
 
   // Derived: estimate days remaining based on last 14d usage
   const daysRemainingMap = useMemo(() => {
