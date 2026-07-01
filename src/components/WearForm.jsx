@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sun, Moon, Check } from 'lucide-react';
+import { Sun, Moon, Check, Package, MapPin } from 'lucide-react';
 import { Modal, ProductThumb } from './Common';
 import { LocationIcon } from './LocationManager';
 import {
@@ -13,6 +13,13 @@ import { groupProducts } from '../lib/variants';
 // WearForm — "put one on". Creates an active wear session: a log entry
 // with putOnAt set and takenOffAt: null. Stock is decremented at the
 // chosen location when saved.
+//
+// Two ways to get there, toggled by `mode`:
+//   'product'  — pick the product/variant first, then see which locations
+//                actually stock it. The original flow; still the default.
+//   'location' — pick a location first, then see only what's in stock
+//                there. Handy when you know where you're grabbing from but
+//                not which variant is left.
 export default function WearForm({
   open, onClose, onSave, products, locations, defaultProductId, title,
 }) {
@@ -26,9 +33,11 @@ export default function WearForm({
     notes: '',
   });
   const [form, setForm] = useState(makeBlank());
+  const [mode, setMode] = useState('product');
 
   useEffect(() => {
     if (open) {
+      setMode('product');
       setForm({
         ...makeBlank(),
         productId: defaultProductId || (products[0]?.id || ''),
@@ -41,8 +50,21 @@ export default function WearForm({
 
   const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Switching modes only touches the product/location picks — time, period,
+  // booster, context and notes carry over untouched either way.
+  const switchMode = (m) => {
+    if (m === mode) return;
+    setMode(m);
+    setForm((f) => ({
+      ...f,
+      productId: m === 'product' ? (defaultProductId || (products[0]?.id || '')) : '',
+      locationId: '',
+    }));
+  };
+
   const product = products.find((p) => p.id === form.productId);
 
+  // === Product-first (mode: 'product') ===
   // Variant grouping: pick a model first, then a variant within it.
   const groups = groupProducts(products);
   const currentGroup =
@@ -66,6 +88,29 @@ export default function WearForm({
   const availableLocations = locations
     .filter((loc) => stockAt(product, loc.id) > 0)
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+  // === Location-first (mode: 'location') ===
+  const sortedLocationsAll = [...locations].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const totalAtLocation = (locId) => products.reduce((s, p) => s + stockAt(p, locId), 0);
+
+  const selectLocation = (locId) => setForm((f) => ({ ...f, locationId: locId, productId: '' }));
+
+  const productsAtLocation = form.locationId
+    ? products.filter((p) => stockAt(p, form.locationId) > 0)
+    : [];
+  const groupsAtLocation = groupProducts(productsAtLocation);
+  const currentGroupAtLocation =
+    groupsAtLocation.find((g) => g.products.some((p) => p.id === form.productId)) || null;
+
+  // Select a model at this location; default to its best-stocked variant HERE.
+  const selectGroupAtLocation = (key) => {
+    const g = groupsAtLocation.find((x) => x.key === key);
+    if (!g) return;
+    const best = [...g.products].sort(
+      (a, b) => stockAt(b, form.locationId) - stockAt(a, form.locationId)
+    )[0];
+    update('productId', best?.id || g.products[0].id);
+  };
 
   const valid = form.productId && form.locationId && product;
 
@@ -118,80 +163,187 @@ export default function WearForm({
     >
       <div style={{ display: 'grid', gap: 14 }}>
         <div>
-          <label className="label">Which product?</label>
-          <select
-            className="select"
-            value={currentGroup?.key || ''}
-            onChange={(e) => selectGroup(e.target.value)}
-          >
-            {groups.map((g) => (
-              <option key={g.key} value={g.key}>
-                {g.label}{g.isMulti ? ` · ${g.products.length} variants` : ''}
-              </option>
-            ))}
-          </select>
-          {product && (
-            <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
-              {product.size} · {ABSORBENCY.find((a) => a.value === product.absorbency)?.label}
-            </div>
-          )}
-        </div>
-
-        {currentGroup?.isMulti && (
-          <div>
-            <label className="label">Which variant?</label>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {currentGroup.products.map((p) => {
-                const st = totalStock(p);
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`check-row ${form.productId === p.id ? 'active' : ''}`}
-                    onClick={() => selectProduct(p.id)}
-                  >
-                    <ProductThumb product={p} size={20} />
-                    <span style={{ flex: 1 }}>{(p.print && p.print.trim()) || 'Default'}</span>
-                    <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
-                      {st} total
-                    </span>
-                    {form.productId === p.id && <Check size={14} />}
-                  </button>
-                );
-              })}
-            </div>
+          <label className="label">Choose by</label>
+          <div className="seg" style={{ width: '100%' }}>
+            <button
+              type="button" style={{ flex: 1 }}
+              className={`seg-btn ${mode === 'product' ? 'active' : ''}`}
+              onClick={() => switchMode('product')}
+            >
+              <Package size={14} /> Product
+            </button>
+            <button
+              type="button" style={{ flex: 1 }}
+              className={`seg-btn ${mode === 'location' ? 'active' : ''}`}
+              onClick={() => switchMode('location')}
+            >
+              <MapPin size={14} /> Location
+            </button>
           </div>
-        )}
-
-        <div>
-          <label className="label">Taking it from where?</label>
-          {availableLocations.length === 0 ? (
-            <div className="card" style={{ padding: 12, fontSize: 13, color: 'var(--ink-soft)' }}>
-              No location currently has this product in stock. Restock first, or pick another product.
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              {availableLocations.map((loc) => {
-                const stock = stockAt(product, loc.id);
-                return (
-                  <button
-                    key={loc.id}
-                    type="button"
-                    className={`check-row ${form.locationId === loc.id ? 'active' : ''}`}
-                    onClick={() => update('locationId', loc.id)}
-                  >
-                    <LocationIcon name={loc.icon} size={14} style={{ color: 'var(--ink-soft)' }} />
-                    <span style={{ flex: 1 }}>{loc.name}</span>
-                    <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
-                      {stock} on hand
-                    </span>
-                    {form.locationId === loc.id && <Check size={14} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
+
+        {mode === 'product' ? (
+          <>
+            <div>
+              <label className="label">Which product?</label>
+              <select
+                className="select"
+                value={currentGroup?.key || ''}
+                onChange={(e) => selectGroup(e.target.value)}
+              >
+                {groups.map((g) => (
+                  <option key={g.key} value={g.key}>
+                    {g.label}{g.isMulti ? ` · ${g.products.length} variants` : ''}
+                  </option>
+                ))}
+              </select>
+              {product && (
+                <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
+                  {product.size} · {ABSORBENCY.find((a) => a.value === product.absorbency)?.label}
+                </div>
+              )}
+            </div>
+
+            {currentGroup?.isMulti && (
+              <div>
+                <label className="label">Which variant?</label>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {currentGroup.products.map((p) => {
+                    const st = totalStock(p);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`check-row ${form.productId === p.id ? 'active' : ''}`}
+                        onClick={() => selectProduct(p.id)}
+                      >
+                        <ProductThumb product={p} size={20} />
+                        <span style={{ flex: 1 }}>{(p.print && p.print.trim()) || 'Default'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
+                          {st} total
+                        </span>
+                        {form.productId === p.id && <Check size={14} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="label">Taking it from where?</label>
+              {availableLocations.length === 0 ? (
+                <div className="card" style={{ padding: 12, fontSize: 13, color: 'var(--ink-soft)' }}>
+                  No location currently has this product in stock. Restock first, or pick another product.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {availableLocations.map((loc) => {
+                    const stock = stockAt(product, loc.id);
+                    return (
+                      <button
+                        key={loc.id}
+                        type="button"
+                        className={`check-row ${form.locationId === loc.id ? 'active' : ''}`}
+                        onClick={() => update('locationId', loc.id)}
+                      >
+                        <LocationIcon name={loc.icon} size={14} style={{ color: 'var(--ink-soft)' }} />
+                        <span style={{ flex: 1 }}>{loc.name}</span>
+                        <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
+                          {stock} on hand
+                        </span>
+                        {form.locationId === loc.id && <Check size={14} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <label className="label">Which location?</label>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {sortedLocationsAll.map((loc) => {
+                  const total = totalAtLocation(loc.id);
+                  return (
+                    <button
+                      key={loc.id}
+                      type="button"
+                      className={`check-row ${form.locationId === loc.id ? 'active' : ''}`}
+                      onClick={() => selectLocation(loc.id)}
+                    >
+                      <LocationIcon name={loc.icon} size={14} style={{ color: 'var(--ink-soft)' }} />
+                      <span style={{ flex: 1 }}>{loc.name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
+                        {total} on hand
+                      </span>
+                      {form.locationId === loc.id && <Check size={14} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {form.locationId && (
+              <div>
+                <label className="label">What's available there?</label>
+                {groupsAtLocation.length === 0 ? (
+                  <div className="card" style={{ padding: 12, fontSize: 13, color: 'var(--ink-soft)' }}>
+                    Nothing in stock at this location right now. Restock here, or pick another location.
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      className="select"
+                      value={currentGroupAtLocation?.key || ''}
+                      onChange={(e) => selectGroupAtLocation(e.target.value)}
+                    >
+                      <option value="" disabled>Choose one…</option>
+                      {groupsAtLocation.map((g) => (
+                        <option key={g.key} value={g.key}>
+                          {g.label}{g.isMulti ? ` · ${g.products.length} variants` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {product && (
+                      <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 6, fontStyle: 'italic' }}>
+                        {product.size} · {ABSORBENCY.find((a) => a.value === product.absorbency)?.label}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {currentGroupAtLocation?.isMulti && (
+              <div>
+                <label className="label">Which variant?</label>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {currentGroupAtLocation.products.map((p) => {
+                    const st = stockAt(p, form.locationId);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`check-row ${form.productId === p.id ? 'active' : ''}`}
+                        onClick={() => update('productId', p.id)}
+                      >
+                        <ProductThumb product={p} size={20} />
+                        <span style={{ flex: 1 }}>{(p.print && p.print.trim()) || 'Default'}</span>
+                        <span style={{ fontSize: 12, color: 'var(--ink-mute)', marginRight: 6 }}>
+                          {st} here
+                        </span>
+                        {form.productId === p.id && <Check size={14} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         <div>
           <label className="label">When did you put it on?</label>

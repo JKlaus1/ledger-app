@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Pencil, MinusCircle, PlusCircle, ArrowRightLeft, Package } from 'lucide-react';
+import { Plus, Pencil, MinusCircle, PlusCircle, ArrowRightLeft, Package, ChevronDown, ChevronRight } from 'lucide-react';
 import { ProductThumb, Pill } from './Common';
 import { LocationIcon } from './LocationManager';
 import {
@@ -141,6 +141,10 @@ function GroupBlock({
   group, locations, thumbs, daysRemainingMap,
   onLogQuick, onRestock, onMove, onEdit, onPhotoTap,
 }) {
+  // Multi-variant groups default to collapsed — just the title, variant
+  // count, and combined total — so a shelf of prints doesn't turn into a
+  // wall of rows. Tap the header to expand and see each variant.
+  const [collapsed, setCollapsed] = useState(true);
   const rowProps = {
     locations, thumbs, onLogQuick, onRestock, onMove, onEdit, onPhotoTap,
   };
@@ -153,7 +157,8 @@ function GroupBlock({
     );
   }
 
-  // Multiple variants: a header for the shared product, variants nested beneath.
+  // Multiple variants: a header for the shared product, variants nested
+  // beneath — collapsible down to just that header.
   return (
     <div
       style={{
@@ -161,7 +166,16 @@ function GroupBlock({
         padding: '4px 10px', marginBottom: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px 4px' }}>
+      <button
+        className="row-hover"
+        onClick={() => setCollapsed((c) => !c)}
+        aria-expanded={!collapsed}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 6px',
+          width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
+          font: 'inherit', textAlign: 'left', color: 'inherit', borderRadius: 8,
+        }}
+      >
         <ProductThumb product={group.rep} thumbs={thumbs} size={30} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span className="display" style={{ fontSize: 16 }}>{group.label}</span>
@@ -173,18 +187,23 @@ function GroupBlock({
           <span className="num" style={{ fontSize: 20 }}>{group.total}</span>
           <span className="eyebrow" style={{ fontSize: 9, marginLeft: 4 }}>total</span>
         </div>
-      </div>
-      <div style={{ borderLeft: '2px solid var(--line)', marginLeft: 14, paddingLeft: 6 }}>
-        {group.products.map((p) => (
-          <ProductRow
-            key={p.id}
-            product={p}
-            daysRemaining={daysRemainingMap[p.id]}
-            titleOverride={(p.print && p.print.trim()) || 'Default'}
-            {...rowProps}
-          />
-        ))}
-      </div>
+        {collapsed
+          ? <ChevronRight size={16} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />
+          : <ChevronDown size={16} style={{ color: 'var(--ink-mute)', flexShrink: 0 }} />}
+      </button>
+      {!collapsed && (
+        <div style={{ borderLeft: '2px solid var(--line)', marginLeft: 14, paddingLeft: 6, paddingBottom: 4 }}>
+          {group.products.map((p) => (
+            <ProductRow
+              key={p.id}
+              product={p}
+              daysRemaining={daysRemainingMap[p.id]}
+              titleOverride={(p.print && p.print.trim()) || 'Default'}
+              {...rowProps}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
