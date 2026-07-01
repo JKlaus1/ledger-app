@@ -13,10 +13,17 @@
 //   2. Run under systemd with environment:
 //        LEDGER_BACKUP_TOKEN=<token>   (required)
 //        PORT=8091                     (default)
+//        HOST=127.0.0.1                (default; see Docker note below)
 //        DATA_DIR=/var/lib/ledger-backups   (default)
 //        KEEP=30                       (rolling copies to keep, default)
 //   3. Caddy: route /api/* to it, e.g.
 //        handle /api/* { reverse_proxy 127.0.0.1:8091 }
+//
+// Docker note: if Caddy runs in a Docker container on a bridge network,
+// 127.0.0.1 inside that container is the container itself, so it can't
+// reach a host service bound to loopback. Set HOST to the docker bridge
+// gateway (e.g. HOST=172.17.0.1) and point the reverse_proxy at that same
+// address. Requests still carry the bearer token either way.
 //
 // Endpoints:
 //   GET  /api/backup/health  -> 200 {"ok":true}      (no auth; reveals nothing)
@@ -29,6 +36,7 @@ import crypto from 'node:crypto';
 
 const TOKEN = process.env.LEDGER_BACKUP_TOKEN || '';
 const PORT = Number(process.env.PORT) || 8091;
+const HOST = process.env.HOST || '127.0.0.1';
 const DATA_DIR = process.env.DATA_DIR || '/var/lib/ledger-backups';
 const KEEP = Math.max(1, Number(process.env.KEEP) || 30);
 const MAX_BYTES = Math.max(1, Number(process.env.MAX_BYTES) || 100 * 1024 * 1024);
@@ -144,7 +152,8 @@ const server = http.createServer((req, res) => {
   req.on('error', () => { aborted = true; });
 });
 
-// Localhost only — the outside world reaches this through Caddy.
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Ledger backup receiver on 127.0.0.1:${PORT}, storing in ${DATA_DIR}, keeping ${KEEP}`);
+// Defaults to localhost only — the outside world reaches this through Caddy.
+// With a Dockerized Caddy, HOST is the docker bridge gateway instead.
+server.listen(PORT, HOST, () => {
+  console.log(`Ledger backup receiver on ${HOST}:${PORT}, storing in ${DATA_DIR}, keeping ${KEEP}`);
 });
