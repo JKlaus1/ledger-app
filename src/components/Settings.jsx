@@ -100,6 +100,13 @@ export default function Settings({
         footer={<button className="btn btn-ghost" onClick={onClose}>Done</button>}
       >
         <div style={{ display: 'grid', gap: 14 }}>
+          <div style={{
+            textAlign: 'center', fontSize: 12, color: 'var(--ink-mute)',
+            padding: '2px 0 4px',
+          }}>
+            Ledger · build 2026-07-01
+          </div>
+
           <button
             className="btn btn-ghost"
             style={{ justifyContent: 'flex-start', width: '100%', padding: 14 }}
@@ -174,13 +181,6 @@ export default function Settings({
           <button className="btn btn-danger" onClick={() => setConfirmClear(true)}>
             <AlertTriangle size={14} /> Erase all data
           </button>
-
-          <div style={{
-            marginTop: 24, textAlign: 'center',
-            fontSize: 11, color: 'var(--ink-mute)',
-          }}>
-            Ledger · build 2026-06-25
-          </div>
         </div>
       </Modal>
 
