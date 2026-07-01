@@ -174,6 +174,13 @@ export default function Settings({
           <button className="btn btn-danger" onClick={() => setConfirmClear(true)}>
             <AlertTriangle size={14} /> Erase all data
           </button>
+
+          <div style={{
+            marginTop: 24, textAlign: 'center',
+            fontSize: 11, color: 'var(--ink-mute)',
+          }}>
+            Ledger · build 2026-06-25
+          </div>
         </div>
       </Modal>
 
